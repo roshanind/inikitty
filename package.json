@@ -1,0 +1,40 @@
+{
+  "name": "create-inikitty",
+  "version": "0.1.0",
+  "description": "Scaffolding CLI that generates a fully wired, production-ready SaaS starter.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "create-inikitty": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "templates",
+    "recipes"
+  ],
+  "scripts": {
+    "build": "tsup src/cli.ts src/index.ts --format esm --dts --clean",
+    "dev": "tsx src/cli.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.9.1",
+    "jiti": "^2.3.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.9.0",
+    "@types/node": "^20.14.0",
+    "eslint": "^9.9.0",
+    "tsup": "^8.2.4",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.4",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^2.0.5"
+  }
+}
