@@ -1,0 +1,54 @@
+:root {
+  --vp-c-brand-1: #c97a1f;
+  --vp-c-brand-2: #b16a17;
+  --vp-c-brand-3: #96590f;
+  --vp-c-brand-soft: rgba(201, 122, 31, 0.14);
+}
+
+.dark {
+  --vp-c-brand-1: #e8a548;
+  --vp-c-brand-2: #eab567;
+  --vp-c-brand-3: #f6d19c;
+}
+
+/* Mermaid diagrams get a bordered "plate" and an explicit interactive affordance, since they're
+   pannable/zoomable via svg-pan-zoom (see theme/pan-zoom.ts) rather than static images. */
+.mermaid {
+  position: relative;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+  padding: 1.25rem 1rem 2.25rem;
+  background: var(--vp-code-block-bg);
+  overflow: hidden;
+}
+
+.mermaid svg {
+  cursor: grab;
+}
+
+.mermaid svg:active {
+  cursor: grabbing;
+}
+
+.mermaid::after {
+  content: 'scroll to zoom \00b7 drag to pan \00b7 double-click to reset';
+  position: absolute;
+  left: 1rem;
+  bottom: 0.6rem;
+  font-size: 0.72rem;
+  font-family: var(--vp-font-family-mono);
+  color: var(--vp-c-text-3);
+  letter-spacing: 0.01em;
+  pointer-events: none;
+}
+
+/* svg-pan-zoom's built-in control icons (zoom in/out/reset) default to a fixed size and
+   position; nudge them so they don't collide with the hint label above. */
+.mermaid svg .svg-pan-zoom-control {
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+
+.mermaid:hover svg .svg-pan-zoom-control {
+  opacity: 1;
+}

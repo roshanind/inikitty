@@ -21,7 +21,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "docs:dev": "pnpm --dir docs-site dev",
+    "docs:build": "pnpm --dir docs-site build",
+    "docs:preview": "pnpm --dir docs-site preview"
   },
   "dependencies": {
     "@clack/prompts": "^0.9.1",

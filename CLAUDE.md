@@ -24,6 +24,8 @@ pnpm test:watch    # vitest in watch mode
 
 Run a single test file: `pnpm vitest run tests/unit/resolve.test.ts`. Run by name: `pnpm vitest run -t "conflicts"`.
 
+There's also a separate documentation site in `docs-site/` (VitePress, its own `package.json`/lockfile — not a workspace member of the root package). `pnpm docs:dev` / `pnpm docs:build` / `pnpm docs:preview` from the repo root proxy into it. See `docs-site/README.md`.
+
 The CLI (`src/cli.ts`) is an interactive `@clack/prompts` TUI — it does not work with piped/non-TTY stdin, so don't try to script it with `printf ... | node dist/cli.js` for verification. To exercise generation programmatically (e.g. for manual smoke checks), import `generate` (and `runPostInstalls`, which the CLI now calls separately *after* `pnpm install` — postInstall scripts may depend on installed packages) from `src/index.ts` / `dist/index.js` directly and call them with an explicit `selection`, as the tests do.
 
 To manually verify the `prisma-betterauth-casl-stripe` bundle end-to-end, you need Docker running and Node ≥22 available in the *generated* project (this repo's own tooling can stay on whatever Node version; only the generated `api/` needs 22+ — `nvm use 22` before running `npx auth generate`/`pnpm dev` there if your default is older).
