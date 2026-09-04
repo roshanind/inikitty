@@ -8,6 +8,41 @@ datasource db {
   // Connection URL lives in prisma.config.ts (Prisma 7 moved it out of schema.prisma), not here.
 }
 
+enum MembershipRole {
+  owner
+  admin
+  member
+}
+
+model Tenant {
+  id          String       @id @default(cuid())
+  name        String
+  slug        String       @unique
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  memberships Membership[]
+
+  @@map("tenant")
+}
+
+// `userId` deliberately has no Prisma `@relation` to User: Prisma requires a matching back-relation
+// field on the *other* side of every declared relation, and User is entirely owned/overwritten by
+// `npx auth generate` on every run — we can't hand-add a `memberships Membership[]` field there and
+// have it survive. Real referential integrity (a Postgres FK to "user") is added via raw SQL in the
+// enable-rls migration instead; application code queries by the plain `userId` column.
+model Membership {
+  id        String         @id @default(cuid())
+  userId    String
+  tenantId  String
+  tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  role      MembershipRole @default(member)
+  createdAt DateTime       @default(now())
+
+  @@unique([userId, tenantId])
+  @@index([userId])
+  @@map("membership")
+}
+
 // User/Session/Account/Verification models are generated below this line by:
 //   npx auth generate
 // Don't hand-edit them — re-run the command after changing api/src/auth/auth.ts instead.

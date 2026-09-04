@@ -108,10 +108,15 @@ describe('real base template', () => {
     for (const relPath of [
       'docker-compose.yml',
       'api/prisma/schema.prisma',
+      'api/prisma/enable-rls.sql',
       'api/src/prisma/prisma.service.ts',
       'api/src/prisma/prisma.module.ts',
       'api/src/auth/auth.ts',
       'api/src/auth/current-user.decorator.ts',
+      'api/src/tenancy/tenant.extension.ts',
+      'api/src/tenancy/tenant-context.ts',
+      'api/src/tenancy/tenancy.module.ts',
+      'api/src/tenancy/tenants.controller.ts',
     ]) {
       await expect(fs.stat(path.join(outputDir, relPath))).resolves.toBeDefined();
     }
@@ -124,7 +129,13 @@ describe('real base template', () => {
     expect(moduleTs).toContain("import { AuthModule } from '@thallesp/nestjs-better-auth';");
     expect(moduleTs).toContain('AuthModule.forRoot({ auth }),');
     expect(moduleTs).toContain('PrismaModule,');
+    expect(moduleTs).toContain('TenancyModule,');
     expect(moduleTs).not.toContain('@inikitty:inject:');
+
+    const schemaPrisma = await fs.readFile(path.join(outputDir, 'api', 'prisma', 'schema.prisma'), 'utf8');
+    expect(schemaPrisma).toContain('model Tenant');
+    expect(schemaPrisma).toContain('model Membership');
+    expect(schemaPrisma).toContain('enum MembershipRole');
 
     const authTs = await fs.readFile(path.join(outputDir, 'api', 'src', 'auth', 'auth.ts'), 'utf8');
     expect(authTs).toContain("import { bearer, jwt } from 'better-auth/plugins';");
@@ -144,6 +155,7 @@ describe('real base template', () => {
 
     const envExample = await fs.readFile(path.join(outputDir, '.env.example'), 'utf8');
     expect(envExample).toContain('DATABASE_URL=postgresql://postgres:postgres@localhost:5432/auth-smoke-app');
+    expect(envExample).toContain('APP_DATABASE_URL=postgresql://app_role:');
     expect(envExample).toContain('BETTER_AUTH_SECRET=');
     expect(envExample).toContain('BETTER_AUTH_URL=');
     expect(envExample).not.toContain('@inikitty:inject:');

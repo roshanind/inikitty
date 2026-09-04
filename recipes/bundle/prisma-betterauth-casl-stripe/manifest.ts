@@ -5,7 +5,8 @@ export const manifest: RecipeManifest = {
   category: 'bundle',
   description:
     'Golden-path bundle: Prisma + Postgres, Better Auth, CASL, and Stripe wired end to end. ' +
-    'Currently implements the auth + Prisma slice only; tenancy/RBAC/billing land in follow-up passes.',
+    'Currently implements auth + Prisma and multi-tenancy (Postgres RLS); CASL RBAC enforcement ' +
+    'and Stripe billing land in follow-up passes.',
   packageJsonPatch: {
     api: {
       dependencies: {
@@ -33,7 +34,16 @@ export const manifest: RecipeManifest = {
     {
       key: 'DATABASE_URL',
       example: 'postgresql://postgres:postgres@localhost:5432/{{projectNameKebab}}',
-      description: 'Postgres connection string (see docker-compose.yml for local defaults)',
+      description:
+        'Migration-only, superuser connection (see docker-compose.yml). The running app never ' +
+        'uses this — see APP_DATABASE_URL — so that Postgres row-level security actually applies.',
+    },
+    {
+      key: 'APP_DATABASE_URL',
+      example: 'postgresql://app_role:changeme-app-role-password@localhost:5432/{{projectNameKebab}}',
+      description:
+        'What the running app actually connects with — a limited, non-superuser role subject to ' +
+        'row-level security. Created by the enable-rls migration; rotate the password for real deployments.',
     },
     {
       key: 'BETTER_AUTH_SECRET',
