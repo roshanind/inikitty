@@ -1,4 +1,6 @@
+import 'dotenv/config';
 import 'reflect-metadata';
+import type { NestApplicationOptions } from '@nestjs/common';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -6,7 +8,10 @@ import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const appOptions: NestApplicationOptions = {
+    // @inikitty:inject:app-options
+  };
+  const app = await NestFactory.create(AppModule, appOptions);
 
   app.useGlobalPipes(
     new ValidationPipe({

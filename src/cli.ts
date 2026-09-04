@@ -6,7 +6,9 @@ import * as p from '@clack/prompts';
 import { generate } from './engine/apply.js';
 import { discoverRecipes } from './engine/discover.js';
 import { findPackageRoot } from './engine/fsUtils.js';
+import { runPostInstalls } from './engine/postInstall.js';
 import { BUNDLE_CATEGORY } from './engine/types.js';
+import type { GenerateResult } from './engine/apply.js';
 
 function runCommand(command: string, args: string[], cwd: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -85,11 +87,15 @@ async function main() {
 
   const spinner = p.spinner();
   spinner.start('Generating project files');
+  let result: GenerateResult;
   try {
-    await generate({
+    result = await generate({
       outputDir,
       projectName,
       selection: { bundle, categories },
+      // postInstall scripts (e.g. `prisma migrate`) need installed deps to run against, so they
+      // run after `pnpm install` below, not as part of generate() itself.
+      runPostInstall: false,
     });
     spinner.stop('Project files generated.');
   } catch (err) {
@@ -100,13 +106,27 @@ async function main() {
 
   const installSpinner = p.spinner();
   installSpinner.start('Installing dependencies (pnpm install in api/ and app/)');
+  let installed = false;
   try {
     await runCommand('pnpm', ['install'], path.join(outputDir, 'api'));
     await runCommand('pnpm', ['install'], path.join(outputDir, 'app'));
     installSpinner.stop('Dependencies installed.');
+    installed = true;
   } catch (err) {
     installSpinner.stop('Dependency install failed — you can run "pnpm install" manually.');
     p.log.warn(err instanceof Error ? err.message : String(err));
+  }
+
+  if (installed && result.appliedRecipes.length > 0) {
+    const postInstallSpinner = p.spinner();
+    postInstallSpinner.start('Running recipe setup steps');
+    try {
+      await runPostInstalls(result.appliedRecipes, { outputDir, projectName });
+      postInstallSpinner.stop('Recipe setup complete.');
+    } catch (err) {
+      postInstallSpinner.stop('Recipe setup failed — check the messages above for manual steps.');
+      p.log.warn(err instanceof Error ? err.message : String(err));
+    }
   }
 
   p.outro(

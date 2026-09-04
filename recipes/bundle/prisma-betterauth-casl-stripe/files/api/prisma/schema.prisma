@@ -1,0 +1,13 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  // Connection URL lives in prisma.config.ts (Prisma 7 moved it out of schema.prisma), not here.
+}
+
+// User/Session/Account/Verification models are generated below this line by:
+//   npx auth generate
+// Don't hand-edit them — re-run the command after changing api/src/auth/auth.ts instead.

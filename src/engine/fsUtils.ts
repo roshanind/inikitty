@@ -67,9 +67,14 @@ const TEXT_FILE_EXTENSIONS = new Set([
   '.env',
 ]);
 
+// Dotfiles with no further extension (path.extname returns '' for these) that recipes may need
+// to inject into or that placeholder substitution should still consider text.
+const TEXT_DOTFILES = new Set(['.gitignore', '.dockerignore', '.npmrc']);
+
 export function isTextFile(filePath: string): boolean {
   const base = path.basename(filePath);
   if (base.startsWith('.env')) return true;
+  if (TEXT_DOTFILES.has(base)) return true;
   return TEXT_FILE_EXTENSIONS.has(path.extname(filePath));
 }
 

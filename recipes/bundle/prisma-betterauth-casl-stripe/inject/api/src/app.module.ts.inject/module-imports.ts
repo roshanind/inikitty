@@ -1,0 +1,2 @@
+PrismaModule,
+AuthModule.forRoot({ auth }),

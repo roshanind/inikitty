@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Current state
 
-The **generator engine, CLI, and base template are implemented** (the "foundation pass" — see git history / `docs/product-scope.md`). What does **not** exist yet: any real recipes. `recipes/` currently only has a `README.md` documenting the contract; there is no Prisma/Better Auth/CASL/Stripe bundle, no `Projects` example resource, no `AGENTS.md` generation, and no README/ARCHITECTURE.md assembly. Running `create-inikitty` today generates just the bare, unwired NestJS + Vite/React skeleton in `templates/base/`. Building the golden-path bundle recipe is the next major piece of work — see `docs/product-scope.md` §6–§7 for what it needs to contain.
+The **generator engine, CLI, and base template are implemented** (the "foundation pass"). The golden-path bundle recipe (`recipes/bundle/prisma-betterauth-casl-stripe/`) is being built incrementally as a single evolving recipe, per §8.4's "one tested integration unit" principle — **auth + Prisma are done and verified end-to-end against a real Postgres**; **tenancy, CASL RBAC, Stripe billing, and the `Projects` example resource are not built yet**. There's also one optional category recipe, `auth-extra/jwt-plugin`. No `AGENTS.md` generation or README/ARCHITECTURE.md assembly yet. See `recipes/README.md` for what each recipe actually contains and a list of non-obvious gotchas hit while building the auth slice (Prisma 7's config changes, NestJS asset-copying for a custom Prisma output path, pnpm's strict `node_modules` resolution) — read that before touching the recipe.
+
+**Generated projects using the auth bundle require Node ≥22** (`api/package.json` declares this) — Better Auth's CLI (`auth generate`) depends on `Object.groupBy`, which isn't available on Node 20. The generator repo itself has no such constraint.
 
 ## Development commands
 
@@ -22,7 +24,9 @@ pnpm test:watch    # vitest in watch mode
 
 Run a single test file: `pnpm vitest run tests/unit/resolve.test.ts`. Run by name: `pnpm vitest run -t "conflicts"`.
 
-The CLI (`src/cli.ts`) is an interactive `@clack/prompts` TUI — it does not work with piped/non-TTY stdin, so don't try to script it with `printf ... | node dist/cli.js` for verification. To exercise generation programmatically (e.g. for manual smoke checks), import `generate` from `src/index.ts` / `dist/index.js` directly and call it with an explicit `selection`, as the tests do.
+The CLI (`src/cli.ts`) is an interactive `@clack/prompts` TUI — it does not work with piped/non-TTY stdin, so don't try to script it with `printf ... | node dist/cli.js` for verification. To exercise generation programmatically (e.g. for manual smoke checks), import `generate` (and `runPostInstalls`, which the CLI now calls separately *after* `pnpm install` — postInstall scripts may depend on installed packages) from `src/index.ts` / `dist/index.js` directly and call them with an explicit `selection`, as the tests do.
+
+To manually verify the `prisma-betterauth-casl-stripe` bundle end-to-end, you need Docker running and Node ≥22 available in the *generated* project (this repo's own tooling can stay on whatever Node version; only the generated `api/` needs 22+ — `nvm use 22` before running `npx auth generate`/`pnpm dev` there if your default is older).
 
 ## What Inikitty is
 
@@ -74,8 +78,8 @@ recipes/<category>/<id>/
 
 Two recipe kinds:
 
-- **Category recipes** — independent choices (e.g. UI library) that can be freely mixed with any other category recipe.
-- **Bundle recipes** — integration-coupled choices that must be tested together as one unit (e.g. ORM + auth provider + tenancy wiring + RBAC). v1 ships exactly one bundle: `prisma-betterauth-casl-stripe`. A second ORM means authoring a second bundle (`drizzle-betterauth-casl-stripe`), not making ORM and auth independently pluggable — that integration seam is where "loosely wired" bugs happen, so it stays a single tested unit until proven safe to split.
+- **Category recipes** — independent choices (e.g. UI library, or the optional `jwt-plugin`) that can be freely mixed with any other category recipe.
+- **Bundle recipes** — integration-coupled choices that must be tested together as one unit (e.g. ORM + auth provider + tenancy wiring + RBAC). v1 ships exactly one bundle: `prisma-betterauth-casl-stripe` (currently implementing only its auth + Prisma slice — see `recipes/README.md`). A second ORM means authoring a second bundle (`drizzle-betterauth-casl-stripe`), not making ORM and auth independently pluggable — that integration seam is where "loosely wired" bugs happen, so it stays a single tested unit until proven safe to split.
 
 Engine responsibilities: discover recipes → resolve user selections into one bundle + zero-or-more category recipes (checking `conflicts`/`requires`) → apply base template then each recipe's `files/`/`inject/` in order → merge `packageJsonPatch` and install → run each recipe's `postInstall.ts` in order.
 
@@ -89,7 +93,14 @@ Even though v1 has only one bundle, the selection/resolution logic must be writt
 - `apply.ts` — fixed pipeline order matters: copy base → copy each recipe's `files/` (throws on collision, never silently overwrites) → apply all `inject/` → **`mergeEnvVars` before `stripMarkers`** (the `.env.example` marker must survive to be consumed) → merge `packageJsonPatch` → `{{projectName}}`/`{{projectNameKebab}}` placeholder substitution → `postInstall.ts` runners. `generate()` locates `templates/base`/`recipes` via `findPackageRoot()` (walks up from the running module's own directory until it finds a `package.json`) rather than a hardcoded relative path — this is what makes path resolution work identically whether running unbundled via `tsx` (`src/engine/apply.ts`) or from the tsup-bundled single-file `dist/cli.js`.
 - Never write `{{projectName}}` directly inside a JSX expression (`{{projectName}}`) — that parses as an object-literal shorthand, not a placeholder token. Assign it to a plain-JS `const` first (see `templates/base/app/src/App.tsx`), then reference the variable with single braces.
 
-Engine unit tests use small fixture recipes in `tests/fixtures/` (not real product recipes) so they don't churn as real recipes are added; `tests/smoke/real-template.test.ts` separately exercises the actual `templates/base` + `recipes/`.
+Engine unit tests use small fixture recipes in `tests/fixtures/` (not real product recipes) so they don't churn as real recipes are added; `tests/smoke/real-template.test.ts` separately exercises the actual `templates/base` + `recipes/` — one case with no bundle selected, one with the real `prisma-betterauth-casl-stripe` + `jwt-plugin` selected (file shape and injected content only, `runPostInstall: false` since that needs Docker/network). Full behavioral verification (does signup/login/session actually work against a real Postgres) is currently manual, not automated — see `recipes/README.md`.
+
+### Auth design decisions (apply to `prisma-betterauth-casl-stripe` and anything built on it)
+
+- **Session model is Better Auth's native cookie-based session, not a hand-built JWT access/refresh pair.** §7.1 of the product-scope doc describes "JWT access token + refresh token" — that's the *intent* (short-lived, securely-stored credentials), not a literal mechanism to force onto the library. Don't reimplement JWT access/refresh; that's what `jwt-plugin` is for on the rare occasion something outside this API needs to verify identity without a DB round trip.
+- **Auth endpoints are Better Auth's real routes** (`basePath: '/auth'` — so `POST /auth/sign-up/email`, `POST /auth/sign-in/email`, `GET /auth/get-session`, etc.), not renamed to match §7.1's illustrative `/auth/signup`/`/auth/login` literally. Don't add a wrapper controller to rename them — that's more code duplicating Better Auth's own logic for no real benefit.
+- The `@thallesp/nestjs-better-auth` package registers a **global `AuthGuard`** — every route is protected by default. Anything that must stay public needs `@AllowAnonymous()` (see the `health-decorators` inject marker in `app.controller.ts` for the pattern).
+- Email verification/reset use a `console.log`-based stub (`sendVerificationEmail`/`sendResetPassword` in `auth.ts`) per product-scope §13's own suggested v1 fallback — swapping in a real provider (Resend, Postmark) is future work, not a bug.
 
 ### Multi-tenancy, RBAC, and DTO conventions (apply inside generated projects)
 
@@ -113,7 +124,7 @@ These are hard constraints the generator must bake into every generated project,
 
 Test-first at two levels:
 
-- **Testing the generator itself**: unit tests for recipe resolution, `conflicts`/`requires` checking, marker-comment injection, and `packageJsonPatch` merging are **implemented** (`tests/unit/`, temp-dir only via `fs.mkdtemp`, no real installs), plus a smoke test against the real template (`tests/smoke/`). **Not yet implemented**: e2e tests that actually run `create-inikitty` per bundle into a temp dir, `npm install`, run migrations against a containerized Postgres, start the API, and hit `/auth/signup`, `/auth/login`, `/projects` — this needs a real bundle recipe to exist first.
+- **Testing the generator itself**: unit tests for recipe resolution, `conflicts`/`requires` checking, marker-comment injection, and `packageJsonPatch` merging are **implemented** (`tests/unit/`, temp-dir only via `fs.mkdtemp`, no real installs), plus smoke tests against the real template + real recipes (`tests/smoke/`, file-shape/injection only). **Not yet implemented**: an *automated* e2e suite that runs `create-inikitty` into a temp dir, `pnpm install`, runs migrations against a containerized Postgres, starts the API, and hits real endpoints in CI — this has so far been done manually per recipe change (see `recipes/README.md`) and should eventually become a real CI job per §8.3/§9.1.
 - **Testing generated projects**: not yet implemented — every generated project should eventually ship working unit tests (service layer, tenancy/RBAC mocked) and integration/e2e tests (via `supertest`) covering signup → login → create project → list (own tenant only) → cross-tenant access rejected → RBAC-restricted action rejected for `member`. This depends on the golden-path bundle existing.
 
 ## MVP phasing
