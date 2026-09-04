@@ -3,11 +3,16 @@
 - **`bundle/prisma-betterauth-casl-stripe`** — the v1 golden-path bundle. Currently implements the
   auth + Prisma slice (Postgres via Docker Compose, Prisma with the driver-adapter pattern, Better
   Auth wired into NestJS via `@thallesp/nestjs-better-auth`, email+password with a console-log
-  email stub, a global `AuthGuard`, `@CurrentUser()`) and multi-tenancy (`Tenant`/`Membership`
+  email stub, a global `AuthGuard`, `@CurrentUser()`), multi-tenancy (`Tenant`/`Membership`
   models, auto-provisioning on signup, a request-scoped `TenantContext`, and real Postgres
-  row-level security — see the tenancy gotchas below). CASL RBAC enforcement and Stripe billing are
-  not built yet — they land as extensions to this same recipe in follow-up passes (see its
-  `manifest.ts` description and `docs/product-scope.md` §7).
+  row-level security — see the tenancy gotchas below), and CASL RBAC enforcement (a global
+  `PoliciesGuard` + `@CheckPolicies()` decorator in `api/src/casl/`, backed by tenant-aware ability
+  definitions in the `packages/shared` workspace package so `app/` can import the same rules — see
+  the sharing gotcha below). Stripe billing and the `Projects` example resource are not built yet —
+  they land as extensions to this same recipe in follow-up passes (see its `manifest.ts`
+  description and `docs/product-scope.md` §7). No controller uses `@CheckPolicies()` yet since
+  there's no resource to guard until `Projects` exists — the guard/ability wiring is verified by
+  generation + typecheck + a real `pnpm install`/build, not by an actual role-rejection request.
 - **`auth-extra/jwt-plugin`** — optional, off by default, `requires` the bundle above. Adds Better
   Auth's `jwt()`/`bearer()` plugins so a `GET /auth/token` endpoint can mint a signed JWT from the
   active session, for callers other than this API that need to verify identity independently. Purely
@@ -116,6 +121,53 @@ the engine's resolver (`src/engine/resolve.ts`) enforces these before generation
   policy SQL: `docker compose exec postgres psql -U app_role -d <db>` with no session variable set
   should return zero rows from `membership`, not an error and not other tenants' data. That's the
   proof the design's safety property (fails closed, not open) actually holds.
+
+## Gotchas hit while adding CASL RBAC
+
+- **§6 calls CASL "isomorphic, shared FE+BE rules," but `api/` and `app/` are two independently
+  installed packages with no monorepo link between them** — no root `package.json` or
+  `pnpm-workspace.yaml` existed before this slice. Rather than duplicating the ability-definition
+  file into both trees (drifts on hand-edits) or skipping FE sharing entirely (defers "isomorphic"
+  indefinitely), the recipe now writes a root `pnpm-workspace.yaml` plus a real `packages/shared`
+  workspace package holding the CASL action/subject vocabulary and `defineAbilityFor()`; both
+  `api/` and `app/` depend on it via `workspace:*`. This is the first bundle file to land outside
+  `api/`/`app/` at the output root — `apply.ts`'s `copyTree` already supports writing anywhere in
+  the output tree, so no engine change was needed for the file itself.
+- **A `workspace:*` dependency needs one install at the workspace root, not two separate
+  per-package installs.** `src/cli.ts` previously ran `pnpm install` in `api/` then `app/`
+  independently (there was no workspace before). It now checks for a root `pnpm-workspace.yaml`
+  and, when present, installs once at the output root instead — otherwise `app/`'s
+  `casl-verify-app-shared` (or equivalent) dependency can't resolve. Falls back to the old
+  two-install behavior when no recipe has written a workspace file, so the CLI stays decoupled from
+  knowing this is CASL's doing specifically.
+- **The shared package can't import the Prisma-generated `MembershipRole` type** — same
+  `auth generate`-ownership problem as the `Membership.userId` relation (see the tenancy gotchas):
+  `packages/shared` has no dependency on `api/`'s generated Prisma client at all, and even if it
+  did, that client doesn't exist until `postInstall.ts` runs. `packages/shared` instead declares
+  its own literal union (`'owner' | 'admin' | 'member'`) that happens to be structurally identical
+  to Prisma's generated type, so `TenantContext.getRole()`'s return value passes into
+  `defineAbilityFor()` with no cast — verified by a real `tsc --noEmit` against a generated project
+  (no Prisma-client-shaped errors leaked into the CASL code paths).
+- **`packages/shared` ships compiled output, not raw TypeScript, to avoid `tsc`'s `rootDir`
+  restriction.** `api/`'s and `app/`'s own compilers only accept input files under their own
+  `rootDir`/`include`; a workspace package's `.ts` source living elsewhere isn't a same-project
+  input. `packages/shared` has its own minimal `tsc` build (`CommonJS` output, so `api/`'s NestJS
+  CommonJS build needs no interop, and Vite/esbuild's standard CJS-from-ESM interop handles the
+  `app/` side) and ships `dist/`+`.d.ts` like any normal npm package. `postInstall.ts` runs
+  `pnpm run build` in `packages/shared` right after install, before the Postgres/migration steps,
+  since `api/`'s and `app/`'s own dev/build commands don't build their workspace dependencies for
+  you (there's no Turborepo-style task graph — Turborepo is optional and prompt-gated, so the
+  golden path can't rely on it).
+- **`api/` and `app/` both need `@casl/ability` as a direct dependency, not just `packages/shared`**
+  — same pnpm strict/isolated `node_modules` reasoning already hit for `zod` and
+  `@prisma/client-runtime-utils`: type-checking code that imports `AppAbility`/`PolicyHandler` from
+  `packages/shared` needs `@casl/ability`'s own types resolvable, which pnpm won't do transitively.
+- **Verified by generation + a real `pnpm install` + `tsc`/`vite build` in a temp output
+  directory** (Docker/Postgres not required for this slice, unlike the tenancy verification below)
+  — confirmed the workspace `packages/shared` symlink resolves from both `api/`'s and `app/`'s
+  `node_modules`, `packages/shared`'s own `tsc` build produces `dist/`, and both consuming packages
+  typecheck (`app/` additionally bundled cleanly via `vite build`) with zero errors attributable to
+  CASL/the shared package specifically.
 
 ## Injecting into a file
 

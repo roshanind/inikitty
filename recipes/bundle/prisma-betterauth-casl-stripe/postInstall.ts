@@ -50,6 +50,15 @@ const MANUAL_STEPS = [
 
 export default async function postInstall(ctx: PostInstallContext): Promise<void> {
   try {
+    // packages/shared ships raw TS with its own `tsc` build (see its package.json) — api/'s and
+    // app/'s own builds consume its compiled dist/, which doesn't exist until this runs once.
+    await run('pnpm', ['run', 'build'], `${ctx.outputDir}/packages/shared`);
+  } catch (err) {
+    console.warn(err instanceof Error ? err.message : String(err));
+    console.warn('\nCould not build packages/shared automatically — run "pnpm run build" there before starting api/ or app/.\n');
+  }
+
+  try {
     await run('docker', ['compose', 'up', '-d'], ctx.outputDir);
     await waitForPostgres(ctx.outputDir);
 

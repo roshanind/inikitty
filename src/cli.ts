@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import * as p from '@clack/prompts';
 import { generate } from './engine/apply.js';
 import { discoverRecipes } from './engine/discover.js';
-import { findPackageRoot } from './engine/fsUtils.js';
+import { findPackageRoot, pathExists } from './engine/fsUtils.js';
 import { runPostInstalls } from './engine/postInstall.js';
 import { BUNDLE_CATEGORY } from './engine/types.js';
 import type { GenerateResult } from './engine/apply.js';
@@ -104,12 +104,22 @@ async function main() {
     process.exit(1);
   }
 
+  // A recipe (e.g. the golden-path bundle, for its packages/shared) may have written a root
+  // pnpm-workspace.yaml — install once at the root then, so workspace:* deps link correctly,
+  // rather than two isolated installs that can't see each other's packages.
+  const isWorkspace = await pathExists(path.join(outputDir, 'pnpm-workspace.yaml'));
   const installSpinner = p.spinner();
-  installSpinner.start('Installing dependencies (pnpm install in api/ and app/)');
+  installSpinner.start(
+    isWorkspace ? 'Installing dependencies (pnpm install)' : 'Installing dependencies (pnpm install in api/ and app/)',
+  );
   let installed = false;
   try {
-    await runCommand('pnpm', ['install'], path.join(outputDir, 'api'));
-    await runCommand('pnpm', ['install'], path.join(outputDir, 'app'));
+    if (isWorkspace) {
+      await runCommand('pnpm', ['install'], outputDir);
+    } else {
+      await runCommand('pnpm', ['install'], path.join(outputDir, 'api'));
+      await runCommand('pnpm', ['install'], path.join(outputDir, 'app'));
+    }
     installSpinner.stop('Dependencies installed.');
     installed = true;
   } catch (err) {

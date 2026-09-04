@@ -5,8 +5,8 @@ export const manifest: RecipeManifest = {
   category: 'bundle',
   description:
     'Golden-path bundle: Prisma + Postgres, Better Auth, CASL, and Stripe wired end to end. ' +
-    'Currently implements auth + Prisma and multi-tenancy (Postgres RLS); CASL RBAC enforcement ' +
-    'and Stripe billing land in follow-up passes.',
+    'Currently implements auth + Prisma, multi-tenancy (Postgres RLS), and CASL RBAC enforcement; ' +
+    'Stripe billing and the Projects example resource land in follow-up passes.',
   packageJsonPatch: {
     api: {
       dependencies: {
@@ -21,12 +21,25 @@ export const manifest: RecipeManifest = {
         // single shared copy instead of a nested one — otherwise TS can't portably name the
         // inferred type of `auth` (TS2742) because it transitively references zod's types.
         zod: '^4.3.6',
+        // Type-checking `PolicyHandler`/`AppAbility` (re-exported from the shared package below)
+        // needs this resolvable directly — same pnpm strict-node_modules reasoning as zod above.
+        '@casl/ability': '^6.7.3',
+        // Workspace-linked package (see pnpm-workspace.yaml) holding the CASL action/subject
+        // vocabulary and `defineAbilityFor`, shared as-is with app/ so ability rules aren't
+        // duplicated per side.
+        '{{projectNameKebab}}-shared': 'workspace:*',
       },
       devDependencies: {
         prisma: '^7.10.0',
         // `auth` is Better Auth's own CLI package (replaces the now-deprecated @better-auth/cli),
         // versioned in lockstep with `better-auth` itself.
         auth: '^1.7.2',
+      },
+    },
+    app: {
+      dependencies: {
+        '@casl/ability': '^6.7.3',
+        '{{projectNameKebab}}-shared': 'workspace:*',
       },
     },
   },

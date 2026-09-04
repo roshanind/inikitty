@@ -117,6 +117,14 @@ describe('real base template', () => {
       'api/src/tenancy/tenant-context.ts',
       'api/src/tenancy/tenancy.module.ts',
       'api/src/tenancy/tenants.controller.ts',
+      'api/src/casl/policies.decorator.ts',
+      'api/src/casl/policies.guard.ts',
+      'api/src/casl/casl.module.ts',
+      'pnpm-workspace.yaml',
+      'packages/shared/package.json',
+      'packages/shared/src/casl/action.enum.ts',
+      'packages/shared/src/casl/subjects.ts',
+      'packages/shared/src/casl/ability.factory.ts',
     ]) {
       await expect(fs.stat(path.join(outputDir, relPath))).resolves.toBeDefined();
     }
@@ -130,6 +138,7 @@ describe('real base template', () => {
     expect(moduleTs).toContain('AuthModule.forRoot({ auth }),');
     expect(moduleTs).toContain('PrismaModule,');
     expect(moduleTs).toContain('TenancyModule,');
+    expect(moduleTs).toContain('CaslModule,');
     expect(moduleTs).not.toContain('@inikitty:inject:');
 
     const schemaPrisma = await fs.readFile(path.join(outputDir, 'api', 'prisma', 'schema.prisma'), 'utf8');
@@ -152,6 +161,17 @@ describe('real base template', () => {
     expect(apiPkg.dependencies['@thallesp/nestjs-better-auth']).toBeDefined();
     expect(apiPkg.dependencies['@prisma/client']).toBeDefined();
     expect(apiPkg.devDependencies.prisma).toBeDefined();
+    expect(apiPkg.dependencies['@casl/ability']).toBeDefined();
+    expect(apiPkg.dependencies['auth-smoke-app-shared']).toBe('workspace:*');
+
+    const appPkg = JSON.parse(await fs.readFile(path.join(outputDir, 'app', 'package.json'), 'utf8'));
+    expect(appPkg.dependencies['@casl/ability']).toBeDefined();
+    expect(appPkg.dependencies['auth-smoke-app-shared']).toBe('workspace:*');
+
+    const sharedPkg = JSON.parse(
+      await fs.readFile(path.join(outputDir, 'packages', 'shared', 'package.json'), 'utf8'),
+    );
+    expect(sharedPkg.name).toBe('auth-smoke-app-shared');
 
     const envExample = await fs.readFile(path.join(outputDir, '.env.example'), 'utf8');
     expect(envExample).toContain('DATABASE_URL=postgresql://postgres:postgres@localhost:5432/auth-smoke-app');
