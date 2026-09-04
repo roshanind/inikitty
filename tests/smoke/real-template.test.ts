@@ -120,6 +120,12 @@ describe('real base template', () => {
       'api/src/casl/policies.decorator.ts',
       'api/src/casl/policies.guard.ts',
       'api/src/casl/casl.module.ts',
+      'api/src/billing/billing.module.ts',
+      'api/src/billing/billing.controller.ts',
+      'api/src/billing/billing.service.ts',
+      'api/src/billing/active-subscription.guard.ts',
+      'api/src/billing/requires-active-subscription.decorator.ts',
+      'api/src/billing/dto/create-checkout-session.dto.ts',
       'pnpm-workspace.yaml',
       'packages/shared/package.json',
       'packages/shared/src/casl/action.enum.ts',
@@ -131,6 +137,8 @@ describe('real base template', () => {
 
     const mainTs = await fs.readFile(path.join(outputDir, 'api', 'src', 'main.ts'), 'utf8');
     expect(mainTs).toContain('bodyParser: false,');
+    expect(mainTs).toContain("import { json, raw, type NextFunction, type Request, type Response } from 'express';");
+    expect(mainTs).toContain("req.originalUrl === '/billing/webhook'");
     expect(mainTs).not.toContain('@inikitty:inject:');
 
     const moduleTs = await fs.readFile(path.join(outputDir, 'api', 'src', 'app.module.ts'), 'utf8');
@@ -139,12 +147,18 @@ describe('real base template', () => {
     expect(moduleTs).toContain('PrismaModule,');
     expect(moduleTs).toContain('TenancyModule,');
     expect(moduleTs).toContain('CaslModule,');
+    expect(moduleTs).toContain('BillingModule,');
     expect(moduleTs).not.toContain('@inikitty:inject:');
 
     const schemaPrisma = await fs.readFile(path.join(outputDir, 'api', 'prisma', 'schema.prisma'), 'utf8');
     expect(schemaPrisma).toContain('model Tenant');
     expect(schemaPrisma).toContain('model Membership');
+    expect(schemaPrisma).toContain('model Subscription');
     expect(schemaPrisma).toContain('enum MembershipRole');
+    expect(schemaPrisma).toContain('enum SubscriptionStatus');
+
+    const enableRlsSql = await fs.readFile(path.join(outputDir, 'api', 'prisma', 'enable-rls.sql'), 'utf8');
+    expect(enableRlsSql).toContain('ALTER TABLE "subscription" ENABLE ROW LEVEL SECURITY;');
 
     const authTs = await fs.readFile(path.join(outputDir, 'api', 'src', 'auth', 'auth.ts'), 'utf8');
     expect(authTs).toContain("import { bearer, jwt } from 'better-auth/plugins';");
@@ -163,6 +177,8 @@ describe('real base template', () => {
     expect(apiPkg.devDependencies.prisma).toBeDefined();
     expect(apiPkg.dependencies['@casl/ability']).toBeDefined();
     expect(apiPkg.dependencies['auth-smoke-app-shared']).toBe('workspace:*');
+    expect(apiPkg.dependencies.stripe).toBeDefined();
+    expect(apiPkg.dependencies.express).toBeDefined();
 
     const appPkg = JSON.parse(await fs.readFile(path.join(outputDir, 'app', 'package.json'), 'utf8'));
     expect(appPkg.dependencies['@casl/ability']).toBeDefined();
@@ -178,6 +194,9 @@ describe('real base template', () => {
     expect(envExample).toContain('APP_DATABASE_URL=postgresql://app_role:');
     expect(envExample).toContain('BETTER_AUTH_SECRET=');
     expect(envExample).toContain('BETTER_AUTH_URL=');
+    expect(envExample).toContain('APP_URL=');
+    expect(envExample).toContain('STRIPE_SECRET_KEY=');
+    expect(envExample).toContain('STRIPE_WEBHOOK_SECRET=');
     expect(envExample).not.toContain('@inikitty:inject:');
 
     const compose = await fs.readFile(path.join(outputDir, 'docker-compose.yml'), 'utf8');

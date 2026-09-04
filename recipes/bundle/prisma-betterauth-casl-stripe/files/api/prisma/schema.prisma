@@ -15,14 +15,47 @@ enum MembershipRole {
 }
 
 model Tenant {
-  id          String       @id @default(cuid())
-  name        String
-  slug        String       @unique
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  memberships Membership[]
+  id               String        @id @default(cuid())
+  name             String
+  slug             String        @unique
+  // Nullable — only set once the tenant's first Checkout session succeeds. Not RLS-protected:
+  // Tenant is the scope boundary itself, not scoped data (see CLAUDE.md's tenancy notes).
+  stripeCustomerId String?       @unique
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  memberships      Membership[]
+  subscription     Subscription?
 
   @@map("tenant")
+}
+
+enum SubscriptionStatus {
+  trialing
+  active
+  past_due
+  canceled
+  unpaid
+  incomplete
+  incomplete_expired
+  paused
+}
+
+// One row per tenant (v1 assumes a single plan per tenant, not add-ons/multiple subscriptions).
+// Unlike Membership, this has a real Prisma `@relation` to Tenant — Tenant isn't owned/overwritten
+// by `auth generate` the way User is, so there's no back-relation-survives-regeneration problem to
+// work around with a raw-SQL FK here.
+model Subscription {
+  id                   String             @id @default(cuid())
+  tenantId             String             @unique
+  tenant               Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  stripeSubscriptionId String             @unique
+  priceId              String
+  status               SubscriptionStatus
+  currentPeriodEnd     DateTime
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  @@map("subscription")
 }
 
 // `userId` deliberately has no Prisma `@relation` to User: Prisma requires a matching back-relation

@@ -6,12 +6,14 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+// @inikitty:inject:imports
 
 async function bootstrap() {
   const appOptions: NestApplicationOptions = {
     // @inikitty:inject:app-options
   };
   const app = await NestFactory.create(AppModule, appOptions);
+  // @inikitty:inject:middleware
 
   app.useGlobalPipes(
     new ValidationPipe({

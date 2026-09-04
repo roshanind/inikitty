@@ -10,8 +10,7 @@ import type { Action } from './action.enum';
  */
 export type MembershipRole = 'owner' | 'admin' | 'member';
 
-/** Subjects abilities are defined over. Extend this union as new resources are added (e.g. once
- * Stripe billing lands). */
-export type Subjects = 'Tenant' | 'Membership' | 'Project' | 'all';
+/** Subjects abilities are defined over. Extend this union as new resources are added. */
+export type Subjects = 'Tenant' | 'Membership' | 'Project' | 'Subscription' | 'all';
 
 export type AppAbility = MongoAbility<[Action, Subjects]>;

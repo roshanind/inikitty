@@ -5,8 +5,9 @@ export const manifest: RecipeManifest = {
   category: 'bundle',
   description:
     'Golden-path bundle: Prisma + Postgres, Better Auth, CASL, and Stripe wired end to end. ' +
-    'Currently implements auth + Prisma, multi-tenancy (Postgres RLS), and CASL RBAC enforcement; ' +
-    'Stripe billing and the Projects example resource land in follow-up passes.',
+    'Currently implements auth + Prisma, multi-tenancy (Postgres RLS), CASL RBAC enforcement, and ' +
+    'Stripe billing (Checkout, Customer Portal, webhook-driven Subscription sync); the Projects ' +
+    'example resource lands in a follow-up pass.',
   packageJsonPatch: {
     api: {
       dependencies: {
@@ -28,6 +29,12 @@ export const manifest: RecipeManifest = {
         // vocabulary and `defineAbilityFor`, shared as-is with app/ so ability rules aren't
         // duplicated per side.
         '{{projectNameKebab}}-shared': 'workspace:*',
+        stripe: '^22.6.1',
+        // bodyParser is disabled at the Nest app level (see main.ts) for Better Auth's sake, so
+        // main.ts's own middleware imports `express` directly to restore JSON parsing for
+        // everything else / raw parsing for the Stripe webhook — pnpm's strict node_modules needs
+        // it as a direct dependency here, not just a transitive one via @nestjs/platform-express.
+        express: '^5.1.0',
       },
       devDependencies: {
         prisma: '^7.10.0',
@@ -67,6 +74,23 @@ export const manifest: RecipeManifest = {
       key: 'BETTER_AUTH_URL',
       example: 'http://localhost:3000',
       description: 'Public base URL of the API (used to build auth callback/redirect URLs)',
+    },
+    {
+      key: 'APP_URL',
+      example: 'http://localhost:5173',
+      description: 'Public base URL of the frontend — used to build Checkout/Portal redirect URLs',
+    },
+    {
+      key: 'STRIPE_SECRET_KEY',
+      example: 'sk_test_changeme',
+      description: 'Stripe secret API key (test-mode key for local dev; find it in the Stripe dashboard)',
+    },
+    {
+      key: 'STRIPE_WEBHOOK_SECRET',
+      example: 'whsec_changeme',
+      description:
+        'Signing secret for the /billing/webhook endpoint — for local dev, run `stripe listen ' +
+        '--forward-to localhost:3000/billing/webhook` and use the secret it prints',
     },
   ],
 };

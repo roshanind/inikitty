@@ -5,14 +5,19 @@
   Auth wired into NestJS via `@thallesp/nestjs-better-auth`, email+password with a console-log
   email stub, a global `AuthGuard`, `@CurrentUser()`), multi-tenancy (`Tenant`/`Membership`
   models, auto-provisioning on signup, a request-scoped `TenantContext`, and real Postgres
-  row-level security — see the tenancy gotchas below), and CASL RBAC enforcement (a global
+  row-level security — see the tenancy gotchas below), CASL RBAC enforcement (a global
   `PoliciesGuard` + `@CheckPolicies()` decorator in `api/src/casl/`, backed by tenant-aware ability
   definitions in the `packages/shared` workspace package so `app/` can import the same rules — see
-  the sharing gotcha below). Stripe billing and the `Projects` example resource are not built yet —
-  they land as extensions to this same recipe in follow-up passes (see its `manifest.ts`
-  description and `docs/product-scope.md` §7). No controller uses `@CheckPolicies()` yet since
-  there's no resource to guard until `Projects` exists — the guard/ability wiring is verified by
-  generation + typecheck + a real `pnpm install`/build, not by an actual role-rejection request.
+  the sharing gotcha below), and Stripe billing (`api/src/billing/`: `POST /billing/checkout` and
+  `POST /billing/portal` — both owner-only via `@CheckPolicies()` — plus a public, signature-verified
+  `POST /billing/webhook` that syncs a `Subscription` table, and a `@RequiresActiveSubscription()`
+  guard for gating premium routes — see the billing gotchas below). The `Projects` example resource
+  is not built yet — it lands as the next extension to this same recipe (see its `manifest.ts`
+  description and `docs/product-scope.md` §7). No controller uses `@CheckPolicies()` for a real
+  resource yet since `Projects` doesn't exist — the CASL guard/ability wiring, and the billing
+  endpoints that do use it, are verified by generation + typecheck + a real `pnpm install`/build
+  (plus, for the webhook, a real signature verify/reject round-trip using Stripe's own test-header
+  helper — see below), not by driving actual HTTP requests against a running app.
 - **`auth-extra/jwt-plugin`** — optional, off by default, `requires` the bundle above. Adds Better
   Auth's `jwt()`/`bearer()` plugins so a `GET /auth/token` endpoint can mint a signed JWT from the
   active session, for callers other than this API that need to verify identity independently. Purely
@@ -168,6 +173,58 @@ the engine's resolver (`src/engine/resolve.ts`) enforces these before generation
   `node_modules`, `packages/shared`'s own `tsc` build produces `dist/`, and both consuming packages
   typecheck (`app/` additionally bundled cleanly via `vite build`) with zero errors attributable to
   CASL/the shared package specifically.
+
+## Gotchas hit while adding Stripe billing
+
+- **`bodyParser: false` (needed globally for Better Auth) means *no* route gets a parsed JSON body
+  by default — including the new billing endpoints.** This had gone unnoticed until now because
+  every existing non-auth endpoint (`GET /tenants/me`, `GET /health`) was read-only. `main.ts`
+  gained two new marker comments (`@inikitty:inject:imports` at the top, `@inikitty:inject:middleware`
+  right after `NestFactory.create()`) so this recipe can restore `express.json()` for everything
+  except `/auth/*` (Better Auth reads the raw stream itself) and `/billing/webhook` (Stripe's
+  signature check needs the *raw* body specifically, so that path gets `express.raw()` instead).
+  Any future recipe adding another endpoint that needs its own special body handling should extend
+  this same middleware function rather than adding a third competing one.
+- **The `stripe` npm package's pinned "latest" guess (`^19.4.0`) turned out to not exist** — the
+  same "verify the resolved version after a real `pnpm install`" lesson from the auth+Prisma slice
+  (see above), caught the same way: a real `pnpm install` against the generated project failed
+  immediately with `ERR_PNPM_NO_MATCHING_VERSION` and printed the actual latest (`22.6.1`), which
+  is what's pinned now.
+- **Stripe's TS types want `constructEvent`'s payload as `string | Uint8Array<ArrayBuffer>`
+  specifically — Node's `Buffer` type resolves to `Uint8Array<ArrayBufferLike>`,** which doesn't
+  satisfy that stricter generic and fails `tsc --noEmit` (not caught by `eslint`/runtime, only a
+  real generated-project typecheck surfaced it). Fixed by calling `.toString('utf8')` on the raw
+  body before passing it — Stripe's own docs list the string form as an equally valid input, so
+  this isn't a workaround, just the simpler of two valid call shapes.
+- **The webhook needs a tenant id, but Stripe calls it with no session at all — same
+  chicken-and-egg shape as `TenantContext`'s own bootstrap problem, solved differently.** Rather
+  than looking anything up, `BillingService.createCheckoutSession` stamps `tenantId` into
+  `subscription_data.metadata` at Checkout-session-creation time (when a real tenant-scoped request
+  *is* available). Every subsequent `customer.subscription.*` webhook event carries that same
+  metadata on the Subscription object it's about, so the webhook handler reads `tenantId` straight
+  off the event payload and calls `forTenant(tenantId)` directly — the exact same pattern
+  `auth.ts`'s signup hook already uses to write the first `membership` row outside any request
+  context. (Checkout *Session* metadata, by contrast, does **not** propagate to the Subscription
+  object on its own — hence setting it in `subscription_data.metadata` too, not just top-level.)
+- **`subscription` is RLS-protected like `membership`, but with only one `USING` branch, not
+  two.** `membership`'s policy has a `forUser()` escape hatch specifically because `TenantContext`
+  has to read membership *before* a tenant is known. `subscription` never has that problem — every
+  write already knows its `tenantId` up front (from Checkout metadata, as above), and every read
+  goes through `TenantContext`'s already-established tenant scope (`ActiveSubscriptionGuard`) — so
+  its policy only needs the tenant branch, on both `USING` and `WITH CHECK`.
+- **`Subscription` gets a real Prisma `@relation` to `Tenant`, unlike `Membership`'s relation to
+  `User`.** The raw-SQL-FK workaround in the tenancy gotchas above exists only because `User` is
+  overwritten by `auth generate` on every run; `Tenant` is a hand-authored model with no such
+  problem, so `Subscription.tenant` is an ordinary declared relation — no raw SQL needed for its FK.
+- **Verified without a real Stripe account**, matching this bundle's existing "generation +
+  typecheck + real `pnpm install`/build" verification bar for pieces that don't need Docker: a real
+  generated project's `api/` was typechecked clean (zero errors beyond the pre-existing "Prisma
+  client not generated yet" cascade also present before this slice), and separately, the `stripe`
+  package's own `webhooks.generateTestHeaderString`/`constructEvent` were used directly (no network
+  calls) to confirm a validly-signed test event verifies and survives with its `tenantId` metadata
+  intact, and a tampered signature is rejected. Driving a real Checkout session or a real webhook
+  delivery against a live Stripe account (test mode, `stripe listen --forward-to`) is still manual,
+  same as the Docker/Postgres pieces.
 
 ## Injecting into a file
 

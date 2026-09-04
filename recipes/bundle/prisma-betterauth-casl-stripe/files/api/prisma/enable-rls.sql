@@ -45,3 +45,12 @@ CREATE POLICY membership_tenant_isolation ON "membership"
   WITH CHECK (
     "tenantId" = current_setting('app.current_tenant_id', true)
   );
+
+-- Unlike membership, subscription is never looked up before a tenant is known (the Stripe webhook
+-- always has the tenant id up front, from Checkout/Subscription metadata — see billing.service.ts),
+-- so there's no forUser() escape-hatch branch needed here: both sides only ever check the tenant.
+ALTER TABLE "subscription" ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY subscription_tenant_isolation ON "subscription"
+  USING ("tenantId" = current_setting('app.current_tenant_id', true))
+  WITH CHECK ("tenantId" = current_setting('app.current_tenant_id', true));
