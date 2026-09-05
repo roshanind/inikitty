@@ -54,3 +54,11 @@ ALTER TABLE "subscription" ENABLE ROW LEVEL SECURITY;
 CREATE POLICY subscription_tenant_isolation ON "subscription"
   USING ("tenantId" = current_setting('app.current_tenant_id', true))
   WITH CHECK ("tenantId" = current_setting('app.current_tenant_id', true));
+
+-- Same single-branch shape as subscription above: project is never looked up before a tenant is
+-- known, so there's no forUser() escape hatch needed.
+ALTER TABLE "project" ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY project_tenant_isolation ON "project"
+  USING ("tenantId" = current_setting('app.current_tenant_id', true))
+  WITH CHECK ("tenantId" = current_setting('app.current_tenant_id', true));

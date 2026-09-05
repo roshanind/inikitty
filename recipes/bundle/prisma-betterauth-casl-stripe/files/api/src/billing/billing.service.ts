@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import Stripe from 'stripe';
+import type { SubscriptionStatus } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { forTenant } from '../tenancy/tenant.extension';
 
@@ -9,6 +10,29 @@ function requiredEnv(key: string): string {
     throw new Error(`${key} is not set.`);
   }
   return value;
+}
+
+// Prisma's SubscriptionStatus enum was deliberately written to match Stripe's exact known status
+// values — but Stripe's own TS type isn't a closed union (it has a forward-compatibility escape
+// hatch for statuses added after this SDK version shipped), so it isn't assignable to Prisma's
+// enum without this runtime check. A real mismatch here means Stripe added a new status value;
+// failing loudly beats letting Postgres reject the write with an opaque invalid-enum-value error.
+const KNOWN_STATUSES: ReadonlySet<string> = new Set<SubscriptionStatus>([
+  'trialing',
+  'active',
+  'past_due',
+  'canceled',
+  'unpaid',
+  'incomplete',
+  'incomplete_expired',
+  'paused',
+]);
+
+function toPrismaStatus(status: Stripe.Subscription.Status): SubscriptionStatus {
+  if (!KNOWN_STATUSES.has(status)) {
+    throw new Error(`Unrecognized Stripe subscription status "${status}" — add it to the Prisma SubscriptionStatus enum.`);
+  }
+  return status as SubscriptionStatus;
 }
 
 /** Where to send the customer back after a hosted Checkout/Portal session. No FE billing pages
@@ -126,7 +150,7 @@ export class BillingService {
     const data = {
       stripeSubscriptionId: subscription.id,
       priceId: item.price.id,
-      status: subscription.status,
+      status: toPrismaStatus(subscription.status),
       currentPeriodEnd: new Date(item.current_period_end * 1000),
     };
 

@@ -5,9 +5,9 @@ export const manifest: RecipeManifest = {
   category: 'bundle',
   description:
     'Golden-path bundle: Prisma + Postgres, Better Auth, CASL, and Stripe wired end to end. ' +
-    'Currently implements auth + Prisma, multi-tenancy (Postgres RLS), CASL RBAC enforcement, and ' +
-    'Stripe billing (Checkout, Customer Portal, webhook-driven Subscription sync); the Projects ' +
-    'example resource lands in a follow-up pass.',
+    'Implements auth + Prisma, multi-tenancy (Postgres RLS), CASL RBAC enforcement, Stripe billing ' +
+    '(Checkout, Customer Portal, webhook-driven Subscription sync), and the Projects example ' +
+    'resource (tenant-scoped, RBAC-guarded CRUD with FE list/create/detail pages) end to end.',
   packageJsonPatch: {
     api: {
       dependencies: {
@@ -47,6 +47,11 @@ export const manifest: RecipeManifest = {
       dependencies: {
         '@casl/ability': '^6.7.3',
         '{{projectNameKebab}}-shared': 'workspace:*',
+        // FE half of the Projects worked example: routing, server-state, and the same Better
+        // Auth client library the API uses (its React entrypoint, not the server one).
+        'react-router-dom': '^7.18.3',
+        '@tanstack/react-query': '^5.102.8',
+        'better-auth': '^1.7.2',
       },
     },
   },

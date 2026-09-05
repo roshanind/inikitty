@@ -1,23 +1,34 @@
 # Recipes
 
-- **`bundle/prisma-betterauth-casl-stripe`** — the v1 golden-path bundle. Currently implements the
-  auth + Prisma slice (Postgres via Docker Compose, Prisma with the driver-adapter pattern, Better
-  Auth wired into NestJS via `@thallesp/nestjs-better-auth`, email+password with a console-log
-  email stub, a global `AuthGuard`, `@CurrentUser()`), multi-tenancy (`Tenant`/`Membership`
-  models, auto-provisioning on signup, a request-scoped `TenantContext`, and real Postgres
-  row-level security — see the tenancy gotchas below), CASL RBAC enforcement (a global
+- **`bundle/prisma-betterauth-casl-stripe`** — the v1 golden-path bundle, **functionally complete**.
+  Implements the auth + Prisma slice (Postgres via Docker Compose, Prisma with the driver-adapter
+  pattern, Better Auth wired into NestJS via `@thallesp/nestjs-better-auth`, email+password with a
+  console-log email stub, a global `AuthGuard`, `@CurrentUser()`), multi-tenancy (`Tenant`/
+  `Membership` models, auto-provisioning on signup, a request-scoped `TenantContext`, and real
+  Postgres row-level security — see the tenancy gotchas below), CASL RBAC enforcement (a global
   `PoliciesGuard` + `@CheckPolicies()` decorator in `api/src/casl/`, backed by tenant-aware ability
   definitions in the `packages/shared` workspace package so `app/` can import the same rules — see
-  the sharing gotcha below), and Stripe billing (`api/src/billing/`: `POST /billing/checkout` and
+  the CASL gotchas below), Stripe billing (`api/src/billing/`: `POST /billing/checkout` and
   `POST /billing/portal` — both owner-only via `@CheckPolicies()` — plus a public, signature-verified
   `POST /billing/webhook` that syncs a `Subscription` table, and a `@RequiresActiveSubscription()`
-  guard for gating premium routes — see the billing gotchas below). The `Projects` example resource
-  is not built yet — it lands as the next extension to this same recipe (see its `manifest.ts`
-  description and `docs/product-scope.md` §7). No controller uses `@CheckPolicies()` for a real
-  resource yet since `Projects` doesn't exist — the CASL guard/ability wiring, and the billing
-  endpoints that do use it, are verified by generation + typecheck + a real `pnpm install`/build
-  (plus, for the webhook, a real signature verify/reject round-trip using Stripe's own test-header
-  helper — see below), not by driving actual HTTP requests against a running app.
+  guard for gating premium routes — see the billing gotchas below), and the `Projects` example
+  resource (`api/src/projects/` + `app/src/features/projects/`: tenant-scoped, RBAC-guarded,
+  DTO-validated CRUD with FE list/create/detail pages — see the Projects gotchas below and
+  `docs/adding-a-resource.md` for the full worked-example walkthrough).
+
+  Everything above has been **verified live**, not just via generation/typecheck/build: a real
+  generated project, installed for real, migrated against a real Dockerized Postgres, started with
+  real Node ≥22, driven with real HTTP requests — signup, email verification (via the console-log
+  stub link), session cookie, `GET /tenants/me`, full `Project` CRUD, a second tenant confirming
+  cross-tenant isolation (empty list + 404 on direct access, not a leak), and a role downgraded to
+  `member` via direct SQL confirming CASL actually rejects `PATCH`/`DELETE` while still allowing
+  `GET`/`POST`. The Stripe webhook's signature verification was checked separately with Stripe's
+  own test-header helper (`generateTestHeaderString`/`constructEvent`) — no live Stripe account was
+  used or is needed for that. What's *not* verified this way: interactive browser behavior (React
+  rendering, client-side routing, form submission) — no browser-automation tooling was available in
+  the environment this was built in; the FE was verified via real `tsc`/`vite build` (dev and
+  production) and by fetching the dev server's actual served/transformed modules, not by driving a
+  real DOM.
 - **`auth-extra/jwt-plugin`** — optional, off by default, `requires` the bundle above. Adds Better
   Auth's `jwt()`/`bearer()` plugins so a `GET /auth/token` endpoint can mint a signed JWT from the
   active session, for callers other than this API that need to verify identity independently. Purely
@@ -225,6 +236,133 @@ the engine's resolver (`src/engine/resolve.ts`) enforces these before generation
   intact, and a tampered signature is rejected. Driving a real Checkout session or a real webhook
   delivery against a live Stripe account (test mode, `stripe listen --forward-to`) is still manual,
   same as the Docker/Postgres pieces.
+
+## Gotchas hit while adding the Projects resource
+
+This slice is the first one verified with a *complete* live pass (Docker Postgres, Node 22, a real
+running API, real HTTP requests, two tenants, a role downgrade via direct SQL) rather than
+typecheck/build alone — and that live pass caught several real, previously-latent bugs that no
+amount of `tsc --noEmit` would have surfaced. Read this before assuming "it typechecks" means "it
+works."
+
+- **`api/tsconfig.json` was missing `esModuleInterop`, and `allowSyntheticDefaultImports: true`
+  alone is exactly the trap that looks fine until runtime.** `allowSyntheticDefaultImports` only
+  relaxes the *type checker* — it doesn't change codegen. Without `esModuleInterop`, TS compiles
+  `import Stripe from 'stripe'` to a bare `require("stripe")` and then reads `.default` off it
+  unconditionally; `stripe`'s actual CJS export is `module.exports = StripeConstructor` (no
+  `.default` property at all, no `__esModule` flag), so `new Stripe(...)` becomes
+  `new stripe_1.default(...)` where `stripe_1.default` is `undefined` — `TypeError: ... is not a
+  constructor`, at request time (when `BillingService` first gets instantiated), not at build time.
+  `tsc --noEmit` reports zero errors for this — the type checker has no way to know the codegen is
+  wrong. Fixed by adding `esModuleInterop: true` to the base template's `api/tsconfig.json`. Any
+  future default-imported CJS dependency would have hit the identical silent trap.
+- **`incremental: true` in `api/tsconfig.json`, combined with `nest-cli.json`'s
+  `deleteOutDir: true`, can silently produce a broken partial build.** TS's incremental buildinfo
+  file lands *outside* `dist/` by default when unconfigured (observed at `api/tsconfig.tsbuildinfo`,
+  sibling to `dist/`, not inside it) — so `deleteOutDir: true` wiping `dist/` never invalidates it.
+  On the next build, tsc's stale cache can believe some already-compiled files are unchanged and
+  skip re-emitting them, even though their actual output was just deleted — the result is a `dist/`
+  with some files present and others silently missing (reproduced twice: once leaving out
+  `app.module.js` entirely while `main.js` compiled fine, so `node dist/main.js` failed with
+  `Cannot find module './app.module'`). `nest build`'s own asset-copying step (unrelated to tsc's
+  incremental tracking) always ran fine, which made the missing *compiled* files easy to miss.
+  Fixed by removing `incremental: true` — a scaffolded starter has no real need for it, and the
+  footgun is worse than the perf loss. If you ever reintroduce incremental compilation here, point
+  `tsBuildInfoFile` explicitly *inside* `outDir` first.
+- **`PoliciesGuard` needed `@Injectable({ scope: Scope.REQUEST })`, and didn't have it.** This was
+  the single most serious bug this pass found: CASL enforcement was silently non-functional for
+  every `@CheckPolicies()`-guarded route. `PoliciesGuard` is registered globally via `APP_GUARD`
+  and depends on the request-scoped `TenantContext`; Nest's usual "a provider that injects a
+  request-scoped dependency becomes request-scoped too" behavior does not reliably extend to
+  globally-registered enhancers. Without the explicit scope, Nest instantiates one guard instance
+  at bootstrap, before any request exists — its constructor never really runs with real arguments,
+  so `this.reflector`/`this.tenantContext` are `undefined` on every actual request, and
+  `canActivate()` throws `TypeError: Cannot read properties of undefined (reading 'get')` — a plain
+  500, not a permission error, on literally every route (`GET /tenants/me` included, which has no
+  `@CheckPolicies()` at all — the guard runs globally regardless). Confirmed by direct
+  instrumentation: `this` inside `canActivate()` was `PoliciesGuard {}`, an object with no own
+  properties, meaning the constructor's assignment lines never executed for that instance. Fixed by
+  adding the scope annotation; verified live afterward (`member` correctly gets 403 on
+  `PATCH`/`DELETE`, 200/201 on `GET`/`POST`). **Any future global enhancer depending on a
+  request-scoped provider needs this same annotation, or it will look like it works in every check
+  short of an actual HTTP request.**
+- **`AllExceptionsFilter` swallowed every non-`HttpException` error's real content, with nothing
+  logged anywhere** — a bare `{"statusCode":500,...,"message":"Internal server error"}` on the
+  wire and total silence in the server's own console. This made the `PoliciesGuard` bug above take
+  far longer to diagnose than it should have (the fix was found only by temporarily patching the
+  filter to `console.error` the raw exception). Fixed in the base template: it now logs
+  non-`HttpException` exceptions via Nest's `Logger` before responding, without changing what the
+  client ever sees.
+- **`app.enableCors()` with no options is incompatible with any cookie-based cross-origin
+  request** — it sets `Access-Control-Allow-Origin: *` and no `Access-Control-Allow-Credentials`
+  header at all, which the Fetch spec requires browsers to reject when the request itself asked for
+  credentials (`fetch(..., { credentials: 'include' })`, which the FE's `api-client.ts` always
+  does — Better Auth's session is a cookie, not a bearer token). Confirmed via a real `OPTIONS`
+  preflight from `http://localhost:5173` before and after the fix. Fixed in the base template:
+  `app.enableCors({ origin: process.env.APP_URL ?? true, credentials: true })` — reuses the
+  `APP_URL` env var the billing slice already added (the frontend's own origin), falling back to
+  reflecting the request's origin when it's unset (e.g. the no-bundle case, where there's no
+  frontend to name).
+- **`App.tsx`/`main.tsx` needed marker *pairs*, not single markers** — the first time this recipe
+  needed to *wrap* existing base-template JSX rather than just insert alongside it. The existing
+  single-marker convention only supports pure insertion above a marker line; wrapping the base
+  template's placeholder home page in real `<Routes>`/provider JSX needs content both before *and*
+  after it, with the placeholder ending up nested *inside*. The fix: two markers per wrap point.
+  `App.tsx`'s `routes-open` snippet ends mid-JSX-expression
+  (`<Route path="/" element={`) and `routes-close` closes it (`} /></Routes>`); the marker-comment
+  line sitting between them is on its own line immediately before/after the placeholder `<main>`,
+  so after both snippets are spliced in and markers stripped, the placeholder becomes the `/`
+  route's `element` value, completely unmodified — the no-bundle case (no recipe touching these
+  markers) renders byte-for-byte what it always did. `main.tsx` uses the identical pattern for
+  wrapping `<App />` in `<QueryClientProvider>`/`<BrowserRouter>`. This keeps `react-router-dom`
+  and `@tanstack/react-query` out of the base template's own dependencies entirely — they're
+  `app/`'s `packageJsonPatch` additions, applied only when this bundle is selected.
+- **`packages/shared` needed a dual CJS/ESM build — a single CJS build silently broke `vite
+  build` specifically, not `tsc` or `node`.** This was the hardest bug in this pass to pin down.
+  Symptom: `defineAbilityFor` "is not exported by" the shared package, during `vite build` only —
+  `tsc -b` passed clean, and `node`-based CJS consumption (the API) worked fine. Root-caused by
+  elimination (tried explicit named re-exports instead of `export *`, tried collapsing the
+  re-export barrel, tried a hand-written maximally-plain CJS file with zero TS-generated
+  machinery — *all* of them still failed) down to: Rollup's CJS-named-export static analysis
+  doesn't reliably apply to a package resolved through a **pnpm workspace symlink** rather than a
+  real `node_modules` copy — `resolve.preserveSymlinks: true` and explicit
+  `build.commonjsOptions.include` patterns targeting the package's path both failed to fix it too.
+  The robust fix, not a workaround: `packages/shared` now builds to *both* `dist/cjs/` (via
+  `tsconfig.json`, unchanged) and `dist/esm/` (via a new `tsconfig.esm.json`, `module: ESNext`),
+  with `package.json`'s `exports` map pointing `require` at the CJS build and `import` at the ESM
+  one. Vite/Rollup then consumes genuine, statically-analyzable ESM with no CJS-interop layer
+  involved at all — the actual bug class disappears rather than being routed around. Verified with
+  a real `vite build` producing a working bundle, both immediately after the fix and again from a
+  completely fresh `generate()` → `pnpm install` → build. `postInstall.ts`'s
+  `pnpm run build` in `packages/shared` now runs both `tsc` invocations (the package's own
+  `build` script does `tsc -p tsconfig.json && tsc -p tsconfig.esm.json`) — no engine/postInstall
+  code changes were needed for this.
+- **`Project` gets the same single-`USING`-branch RLS policy shape as `Subscription`, for the same
+  reason**: it's never looked up before a tenant is known, so it doesn't need `membership`'s
+  `forUser()` escape hatch. Unlike `Subscription`, this one *was* live-verified with a real
+  cross-tenant HTTP test (see above).
+- **Better Auth's React client basics, confirmed against real responses, not assumed from
+  types**: `useSession().data` is the literal value `null` (not `undefined`, not an empty object)
+  once resolved with no session — checked via a raw `GET /auth/get-session` response, not the
+  client library's TS types alone. `signIn.email()`/`signUp.email()` return `{ data, error }`
+  rather than throwing. `requireEmailVerification: true` (set in the auth slice) means a fresh
+  signup's session can't authenticate anything until the verification link is visited — since
+  email delivery is a `console.log` stub, `SignupPage` says so explicitly instead of redirecting to
+  a login that would just fail.
+- **Full verification methodology for this slice**: generated a project fresh, `pnpm install` at
+  the workspace root, built `packages/shared`, ran the exact `postInstall.ts` steps by hand
+  (`prisma generate` → `auth generate` → `migrate dev` → `prisma generate` again → copy
+  `enable-rls.sql` into a timestamped migration → `migrate deploy`), built and started the real
+  compiled API (`nest build` + `node dist/main.js`, not `ts-node`/watch mode), then drove it with
+  curl: signup → visit the console-logged verification link → sign in → `GET /tenants/me` →
+  create/list/update a project → confirm `tenantId` never appears in the response → sign up a
+  second user (separate tenant) → confirm their project list is empty and direct access to the
+  first tenant's project 404s → downgrade the first user's role to `member` via
+  `docker compose exec postgres psql` directly → confirm `PATCH`/`DELETE` now 403 while `GET`/
+  `POST` still succeed. Separately, `tsc -b` and `vite build` (production) were run against the FE
+  in the same generated project. Repeated this whole pass a second time, from a clean `generate()`
+  call, once every fix above was in place, to confirm nothing was verified against a
+  hand-patched-in-place copy that didn't reflect the real recipe source.
 
 ## Injecting into a file
 

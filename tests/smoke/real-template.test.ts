@@ -126,11 +126,29 @@ describe('real base template', () => {
       'api/src/billing/active-subscription.guard.ts',
       'api/src/billing/requires-active-subscription.decorator.ts',
       'api/src/billing/dto/create-checkout-session.dto.ts',
+      'api/src/projects/projects.module.ts',
+      'api/src/projects/projects.controller.ts',
+      'api/src/projects/projects.service.ts',
+      'api/src/projects/dto/create-project.dto.ts',
+      'api/src/projects/dto/update-project.dto.ts',
+      'api/src/projects/dto/project-response.dto.ts',
       'pnpm-workspace.yaml',
       'packages/shared/package.json',
+      'packages/shared/tsconfig.json',
+      'packages/shared/tsconfig.esm.json',
       'packages/shared/src/casl/action.enum.ts',
       'packages/shared/src/casl/subjects.ts',
       'packages/shared/src/casl/ability.factory.ts',
+      'app/src/lib/auth-client.ts',
+      'app/src/lib/api-client.ts',
+      'app/src/lib/query-client.ts',
+      'app/src/lib/use-ability.ts',
+      'app/src/features/auth/LoginPage.tsx',
+      'app/src/features/auth/SignupPage.tsx',
+      'app/src/features/auth/RequireAuth.tsx',
+      'app/src/features/projects/api.ts',
+      'app/src/features/projects/ProjectsListPage.tsx',
+      'app/src/features/projects/ProjectDetailPage.tsx',
     ]) {
       await expect(fs.stat(path.join(outputDir, relPath))).resolves.toBeDefined();
     }
@@ -139,6 +157,7 @@ describe('real base template', () => {
     expect(mainTs).toContain('bodyParser: false,');
     expect(mainTs).toContain("import { json, raw, type NextFunction, type Request, type Response } from 'express';");
     expect(mainTs).toContain("req.originalUrl === '/billing/webhook'");
+    expect(mainTs).toContain('app.enableCors({ origin: process.env.APP_URL ?? true, credentials: true });');
     expect(mainTs).not.toContain('@inikitty:inject:');
 
     const moduleTs = await fs.readFile(path.join(outputDir, 'api', 'src', 'app.module.ts'), 'utf8');
@@ -148,17 +167,41 @@ describe('real base template', () => {
     expect(moduleTs).toContain('TenancyModule,');
     expect(moduleTs).toContain('CaslModule,');
     expect(moduleTs).toContain('BillingModule,');
+    expect(moduleTs).toContain('ProjectsModule,');
     expect(moduleTs).not.toContain('@inikitty:inject:');
+
+    const policiesGuardTs = await fs.readFile(path.join(outputDir, 'api', 'src', 'casl', 'policies.guard.ts'), 'utf8');
+    expect(policiesGuardTs).toContain('Scope.REQUEST');
 
     const schemaPrisma = await fs.readFile(path.join(outputDir, 'api', 'prisma', 'schema.prisma'), 'utf8');
     expect(schemaPrisma).toContain('model Tenant');
     expect(schemaPrisma).toContain('model Membership');
     expect(schemaPrisma).toContain('model Subscription');
+    expect(schemaPrisma).toContain('model Project');
     expect(schemaPrisma).toContain('enum MembershipRole');
     expect(schemaPrisma).toContain('enum SubscriptionStatus');
 
     const enableRlsSql = await fs.readFile(path.join(outputDir, 'api', 'prisma', 'enable-rls.sql'), 'utf8');
     expect(enableRlsSql).toContain('ALTER TABLE "subscription" ENABLE ROW LEVEL SECURITY;');
+    expect(enableRlsSql).toContain('ALTER TABLE "project" ENABLE ROW LEVEL SECURITY;');
+
+    const appTsx = await fs.readFile(path.join(outputDir, 'app', 'src', 'App.tsx'), 'utf8');
+    expect(appTsx).toContain('<Routes>');
+    expect(appTsx).toContain('path="/login"');
+    expect(appTsx).toContain('path="/projects"');
+    expect(appTsx).toContain('path="/projects/:id"');
+    expect(appTsx).not.toContain('@inikitty:inject:');
+
+    const mainTsx = await fs.readFile(path.join(outputDir, 'app', 'src', 'main.tsx'), 'utf8');
+    expect(mainTsx).toContain('QueryClientProvider');
+    expect(mainTsx).toContain('BrowserRouter');
+    expect(mainTsx).not.toContain('@inikitty:inject:');
+
+    const sharedPkgJson = JSON.parse(
+      await fs.readFile(path.join(outputDir, 'packages', 'shared', 'package.json'), 'utf8'),
+    );
+    expect(sharedPkgJson.exports['.'].require).toBe('./dist/cjs/index.js');
+    expect(sharedPkgJson.exports['.'].import).toBe('./dist/esm/index.js');
 
     const authTs = await fs.readFile(path.join(outputDir, 'api', 'src', 'auth', 'auth.ts'), 'utf8');
     expect(authTs).toContain("import { bearer, jwt } from 'better-auth/plugins';");
@@ -183,6 +226,9 @@ describe('real base template', () => {
     const appPkg = JSON.parse(await fs.readFile(path.join(outputDir, 'app', 'package.json'), 'utf8'));
     expect(appPkg.dependencies['@casl/ability']).toBeDefined();
     expect(appPkg.dependencies['auth-smoke-app-shared']).toBe('workspace:*');
+    expect(appPkg.dependencies['react-router-dom']).toBeDefined();
+    expect(appPkg.dependencies['@tanstack/react-query']).toBeDefined();
+    expect(appPkg.dependencies['better-auth']).toBeDefined();
 
     const sharedPkg = JSON.parse(
       await fs.readFile(path.join(outputDir, 'packages', 'shared', 'package.json'), 'utf8'),

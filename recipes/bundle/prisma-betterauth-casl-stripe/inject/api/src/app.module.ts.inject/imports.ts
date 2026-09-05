@@ -3,4 +3,5 @@ import { auth } from './auth/auth';
 import { BillingModule } from './billing/billing.module';
 import { CaslModule } from './casl/casl.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { ProjectsModule } from './projects/projects.module';
 import { TenancyModule } from './tenancy/tenancy.module';

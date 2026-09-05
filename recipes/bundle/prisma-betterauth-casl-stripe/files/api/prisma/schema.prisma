@@ -25,6 +25,7 @@ model Tenant {
   updatedAt        DateTime      @updatedAt
   memberships      Membership[]
   subscription     Subscription?
+  projects         Project[]
 
   @@map("tenant")
 }
@@ -74,6 +75,24 @@ model Membership {
   @@unique([userId, tenantId])
   @@index([userId])
   @@map("membership")
+}
+
+// The canonical worked example (see docs/adding-a-resource.md): tenant-scoped, RBAC-guarded,
+// DTO-validated, with FE list/create/detail pages. Delete this model (and api/src/projects/,
+// app/src/features/projects/) and copy the pattern for real resources.
+//
+// `createdBy` is a plain userId column, not a Prisma `@relation` to User, for the same
+// auth-generate-ownership reason as Membership.userId above.
+model Project {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name      String
+  createdBy String
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@map("project")
 }
 
 // User/Session/Account/Verification models are generated below this line by:
