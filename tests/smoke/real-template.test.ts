@@ -49,8 +49,12 @@ describe('real base template', () => {
       'api/src/main.ts',
       'api/src/app.module.ts',
       'api/src/app.controller.ts',
+      'api/src/app.controller.spec.ts',
       'api/src/app.service.ts',
       'api/src/common/filters/all-exceptions.filter.ts',
+      'api/tsconfig.build.json',
+      'api/test/app.e2e-spec.ts',
+      'api/test/jest-e2e.js',
       'app/package.json',
       'app/tsconfig.json',
       'app/vite.config.ts',
@@ -65,9 +69,20 @@ describe('real base template', () => {
 
     const apiPkg = JSON.parse(await fs.readFile(path.join(outputDir, 'api', 'package.json'), 'utf8'));
     expect(apiPkg.name).toBe('smoke-test-app-api');
+    expect(apiPkg.scripts.test).toBe('jest');
+    expect(apiPkg.scripts['test:e2e']).toBe('jest --config ./test/jest-e2e.js');
+    expect(apiPkg.devDependencies.jest).toBeDefined();
+    expect(apiPkg.devDependencies['@nestjs/testing']).toBeDefined();
+    expect(apiPkg.devDependencies.supertest).toBeDefined();
 
     const appPkg = JSON.parse(await fs.readFile(path.join(outputDir, 'app', 'package.json'), 'utf8'));
     expect(appPkg.name).toBe('smoke-test-app-app');
+
+    const appControllerSpec = await fs.readFile(
+      path.join(outputDir, 'api', 'src', 'app.controller.spec.ts'),
+      'utf8',
+    );
+    expect(appControllerSpec).toContain("name: 'Smoke Test App'");
 
     const moduleContent = await fs.readFile(path.join(outputDir, 'api', 'src', 'app.module.ts'), 'utf8');
     expect(moduleContent).not.toContain('@inikitty:inject:');
@@ -132,6 +147,9 @@ describe('real base template', () => {
       'api/src/projects/dto/create-project.dto.ts',
       'api/src/projects/dto/update-project.dto.ts',
       'api/src/projects/dto/project-response.dto.ts',
+      'api/src/projects/projects.service.spec.ts',
+      'api/test/golden-path.e2e-spec.ts',
+      'api/test/__mocks__/thallesp-nestjs-better-auth.ts',
       'pnpm-workspace.yaml',
       'packages/shared/package.json',
       'packages/shared/tsconfig.json',
@@ -207,6 +225,7 @@ describe('real base template', () => {
     expect(authTs).toContain("import { bearer, jwt } from 'better-auth/plugins';");
     expect(authTs).toContain('jwt(),');
     expect(authTs).toContain('bearer(),');
+    expect(authTs).toContain("requireEmailVerification: process.env.NODE_ENV !== 'test',");
     expect(authTs).not.toContain('@inikitty:inject:');
 
     const gitignore = await fs.readFile(path.join(outputDir, '.gitignore'), 'utf8');
@@ -222,6 +241,9 @@ describe('real base template', () => {
     expect(apiPkg.dependencies['auth-smoke-app-shared']).toBe('workspace:*');
     expect(apiPkg.dependencies.stripe).toBeDefined();
     expect(apiPkg.dependencies.express).toBeDefined();
+    expect(apiPkg.jest.moduleNameMapper['^@thallesp/nestjs-better-auth$']).toBe(
+      '<rootDir>/test/__mocks__/thallesp-nestjs-better-auth.ts',
+    );
 
     const appPkg = JSON.parse(await fs.readFile(path.join(outputDir, 'app', 'package.json'), 'utf8'));
     expect(appPkg.dependencies['@casl/ability']).toBeDefined();

@@ -32,7 +32,10 @@ export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
   emailAndPassword: {
     enabled: true,
-    requireEmailVerification: true,
+    // Skipped only under `NODE_ENV=test` (set automatically by Jest, and explicitly by the e2e
+    // suite's spawned server) — there's no real inbox to check in a test run, and email delivery
+    // is a stub anyway (see below). Real usage always requires it.
+    requireEmailVerification: process.env.NODE_ENV !== 'test',
     // Stub email delivery for v1 — swap in a real provider (Resend, Postmark, ...) here before
     // deploying. See docs/product-scope.md §13.
     sendResetPassword: async ({ user, url }) => {

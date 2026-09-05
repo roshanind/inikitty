@@ -47,6 +47,31 @@ describe('mergePackageJsonPatches', () => {
     expect(appPkg.dependencies['alpha-lib']).toBeUndefined();
   });
 
+  it('merges jestModuleNameMapper into package.json jest.moduleNameMapper without disturbing other patches', async () => {
+    const outputDir = await makeOutputDirFromBase();
+    const mapperRecipe: DiscoveredRecipe = {
+      ...alpha,
+      manifest: {
+        ...alpha.manifest,
+        id: 'alpha',
+        packageJsonPatch: {
+          api: {
+            dependencies: { 'alpha-lib': '^1.0.0' },
+            jestModuleNameMapper: { '^esm-only-lib$': '<rootDir>/../test/__mocks__/esm-only-lib.ts' },
+          },
+        },
+      },
+    };
+
+    await mergePackageJsonPatches([mapperRecipe], outputDir);
+
+    const apiPkg = JSON.parse(await fs.readFile(path.join(outputDir, 'api', 'package.json'), 'utf8'));
+    expect(apiPkg.jest.moduleNameMapper['^esm-only-lib$']).toBe('<rootDir>/../test/__mocks__/esm-only-lib.ts');
+    // Confirms jestModuleNameMapper merging is additive (creates `jest`) and doesn't clobber
+    // sibling patch fields (dependencies) applied from the same fragment.
+    expect(apiPkg.dependencies['alpha-lib']).toBe('^1.0.0');
+  });
+
   it('lets a later recipe override an earlier one for the same dependency key, with a warning', async () => {
     const outputDir = await makeOutputDirFromBase();
     const overrideRecipe: DiscoveredRecipe = {

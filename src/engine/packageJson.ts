@@ -5,6 +5,24 @@ import type { DiscoveredRecipe, PackageJsonPatchFragment } from './types.js';
 
 type PackageJsonTarget = 'api' | 'app';
 
+function mergeRecord(
+  existing: Record<string, string>,
+  patch: Record<string, string>,
+  recipeId: string,
+  target: PackageJsonTarget,
+  fieldLabel: string,
+): void {
+  for (const [key, value] of Object.entries(patch)) {
+    if (existing[key] !== undefined && existing[key] !== value) {
+      console.warn(
+        `[create-inikitty] "${recipeId}" overrides ${target}/package.json ${fieldLabel}."${key}": ` +
+          `"${existing[key]}" -> "${value}"`,
+      );
+    }
+    existing[key] = value;
+  }
+}
+
 function mergeFragment(
   base: Record<string, unknown>,
   fragment: PackageJsonPatchFragment,
@@ -15,16 +33,16 @@ function mergeFragment(
     const patch = fragment[field];
     if (!patch) continue;
     const existing = (base[field] as Record<string, string> | undefined) ?? {};
-    for (const [key, value] of Object.entries(patch)) {
-      if (existing[key] !== undefined && existing[key] !== value) {
-        console.warn(
-          `[create-inikitty] "${recipeId}" overrides ${target}/package.json ${field}."${key}": ` +
-            `"${existing[key]}" -> "${value}"`,
-        );
-      }
-      existing[key] = value;
-    }
+    mergeRecord(existing, patch, recipeId, target, field);
     base[field] = existing;
+  }
+
+  if (fragment.jestModuleNameMapper) {
+    const jestConfig = (base.jest as Record<string, unknown> | undefined) ?? {};
+    const existingMapper = (jestConfig.moduleNameMapper as Record<string, string> | undefined) ?? {};
+    mergeRecord(existingMapper, fragment.jestModuleNameMapper, recipeId, target, 'jest.moduleNameMapper');
+    jestConfig.moduleNameMapper = existingMapper;
+    base.jest = jestConfig;
   }
 }
 

@@ -7,6 +7,12 @@ export interface PackageJsonPatchFragment {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
   scripts?: Record<string, string>;
+  /** Merged into package.json's `jest.moduleNameMapper` — narrowly scoped (not a generic `jest`
+   * config merge) because that's the one shape a recipe legitimately needs: redirecting Jest's
+   * resolution of a problematic dependency (e.g. an ESM-only package Jest's CJS runtime can't
+   * load even with a transform configured) to a manual mock, without the engine needing to know
+   * arbitrary Jest config shapes (arrays, nested transform tuples, etc.). */
+  jestModuleNameMapper?: Record<string, string>;
 }
 
 export interface EnvVarSpec {

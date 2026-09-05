@@ -29,6 +29,13 @@
   the environment this was built in; the FE was verified via real `tsc`/`vite build` (dev and
   production) and by fetching the dev server's actual served/transformed modules, not by driving a
   real DOM.
+
+  That manual flow is now also a **real, automated test suite** shipped with every generated
+  project: `api/src/projects/projects.service.spec.ts` (unit, tenancy mocked) and
+  `api/test/golden-path.e2e-spec.ts` (e2e — spawns the real compiled server, drives the exact
+  signup → CRUD → cross-tenant → RBAC flow above over real HTTP against a real Postgres). See the
+  testing gotchas below for what building this uncovered — several more real, previously-latent
+  bugs, on top of the ones already listed for each earlier slice.
 - **`auth-extra/jwt-plugin`** — optional, off by default, `requires` the bundle above. Adds Better
   Auth's `jwt()`/`bearer()` plugins so a `GET /auth/token` endpoint can mint a signed JWT from the
   active session, for callers other than this API that need to verify identity independently. Purely
@@ -363,6 +370,112 @@ works."
   in the same generated project. Repeated this whole pass a second time, from a clean `generate()`
   call, once every fix above was in place, to confirm nothing was verified against a
   hand-patched-in-place copy that didn't reflect the real recipe source.
+
+## Gotchas hit while adding the automated test suite
+
+The base template's Jest scaffolding (unit + e2e) and this bundle's own tests
+(`projects.service.spec.ts`, `test/golden-path.e2e-spec.ts`) turn the manual verification flow
+described above into something that runs with `pnpm test`/`pnpm test:e2e`. Getting there hit
+several more real bugs, on top of the earlier slices' — this is the deepest, most
+config-format-specific set of gotchas in the whole bundle so far.
+
+- **`@thallesp/nestjs-better-auth` (and `better-auth` itself) ship ESM-only, and Jest's
+  CommonJS-based test runner cannot load a real `.mjs` file even with a transform explicitly
+  configured for it.** This is a genuine, current Jest limitation, not a misconfiguration — the
+  error message itself says so ("Use Node v24.9+ where Jest supports require(esm) natively"). Node
+  22's own `require()` *can* load this package natively (confirmed: the real compiled app boots
+  fine), but Jest's own module loader doesn't yet have that capability even running under Node 22.
+  Tried and confirmed **not sufficient** on their own: adding `.mjs` to the transform pattern;
+  `transformIgnorePatterns` overrides (including one correctly scoped to pnpm's actual
+  `.pnpm/<pkg>@<version>/node_modules/<pkg>` nesting — verified as syntactically correct against
+  the real failing path, and still didn't work); `isolatedModules: true`. The actual fix: **don't
+  try to transform the real ESM package at all — mock it.** A manual Jest mock
+  (`api/test/__mocks__/thallesp-nestjs-better-auth.ts`, exporting no-op stand-ins for the two
+  runtime symbols actually used, `AllowAnonymous` and `AuthModule`) wired via
+  `jest.moduleNameMapper`, so Jest's loader never touches the real file for unit tests at all.
+- **The engine gained `packageJsonPatch.jestModuleNameMapper` to make the mock above possible.**
+  `packageJsonPatch` previously only merged `dependencies`/`devDependencies`/`scripts` — a
+  deliberately narrow set of top-level `package.json` keys, not a generic config merger. Rather
+  than widen it to arbitrary Jest config (which has array/tuple-shaped fields like `transform` that
+  a flat string-record merge can't represent safely), it grew one new, narrowly-scoped field that
+  merges into `package.json`'s `jest.moduleNameMapper` specifically — the one shape a recipe
+  legitimately needs for "redirect Jest's resolution of a problematic dependency to a mock." See
+  `src/engine/packageJson.ts`'s `mergeFragment`/`mergeRecord` and `src/engine/types.ts`.
+- **Both e2e specs (the base template's own, and this bundle's `golden-path.e2e-spec.ts`) spawn
+  the real compiled server (`node dist/main.js`) rather than using Nest's in-process
+  `TestingModule` — deliberately, not merely for parity with the manual verification process.**
+  The base template's own `app.e2e-spec.ts` was *first written* using
+  `Test.createTestingModule({ imports: [AppModule] }).compile()`, which worked fine with no bundle
+  selected — then broke the moment this bundle was applied, because `AppModule` transitively
+  imports Better Auth's ESM-only packages for real (not through a mockable single import site the
+  way `app.controller.ts`'s `AllowAnonymous` is). Mocking every ESM dependency that could ever end
+  up in `AppModule`'s transitive closure doesn't scale as more bundles/recipes are added. Spawning
+  the real server sidesteps the whole class of problem structurally: Jest's module loader never
+  touches app code at all, it just makes HTTP requests to an already-running process — exactly like
+  a browser or `curl` would, and exactly what's actually deployed.
+- **The unit-test and e2e Jest configs must resolve `<rootDir>` to the *same* directory, or a
+  shared `moduleNameMapper` value silently points to the wrong place in one of them.** Nest's own
+  default scaffolding gives unit tests `rootDir: "src"` (in `package.json`'s `jest` block) and e2e
+  tests `rootDir: ".."` relative to `test/jest-e2e.json` (i.e. `api/`) — two different effective
+  roots. A `moduleNameMapper` value written as `<rootDir>/../test/__mocks__/...` (correct for
+  `rootDir: "src"`) resolves one directory too high when reused verbatim under the e2e config's
+  `rootDir`. Fixed by standardizing both configs on `rootDir` = `api/` (unit tests use
+  `roots: ["<rootDir>/src"]` to scope discovery instead of changing `rootDir` itself), so a single
+  mapper value (`<rootDir>/test/__mocks__/...`) is correct under both.
+- **`test/jest-e2e.json` became `test/jest-e2e.js`** specifically so it can
+  `require('../package.json').jest?.moduleNameMapper` and inherit whatever a recipe contributed via
+  `jestModuleNameMapper`, rather than needing its own separate, hard-to-target injection point for
+  the exact same value. Plain JSON can't express that composition.
+- **Jest, with `rootDir` widened to the whole `api/` folder, will scan `dist/` too unless told
+  not to** — surfaced as a `jest-haste-map: Haste module naming collision` warning, because the
+  generated Prisma client's own `package.json` exists both under `src/generated/prisma/` and (after
+  a build) `dist/generated/prisma/`, and Jest's haste map doesn't expect two files with the same
+  declared package name. Fixed by scoping both configs' `roots` explicitly (`<rootDir>/src` for
+  unit, `<rootDir>/test` for e2e) instead of letting either scan the whole `rootDir`.
+- **`nest build` needed a real `tsconfig.build.json`, and its `exclude` list needed to fully
+  re-list everything the base `tsconfig.json` already excluded.** Without a `tsconfig.build.json`,
+  `nest build` fell back to the plain `tsconfig.json`, which has no reason to exclude `*.spec.ts`/
+  `test/` — so unit and e2e spec files were being compiled straight into `dist/`, harmless but
+  wasteful. Adding one (Nest's own standard convention, extending the base config) fixed that —
+  *except* `"extends"` in `tsconfig.json` **replaces** array-valued fields like `exclude` wholesale,
+  it does not merge them with the base config's own `exclude` list. The base `tsconfig.json` had
+  `"*.config.ts"` in its `exclude` specifically to keep `prisma.config.ts` out of the app build
+  (Prisma's CLI reads that file directly; it's never imported by app code) — a `tsconfig.build.json`
+  that excluded `test`/`**/*spec.ts` without also re-adding `"*.config.ts"` silently broke that,
+  reintroducing a `prisma.config.ts is not under rootDir` build error that had already been solved
+  once, for a different file, in an earlier slice.
+- **Better Auth's `requireEmailVerification: true` (set in the auth slice) has no automated-testing
+  escape hatch by default** — a fresh signup's session can't authenticate anything until the
+  console-logged verification link is visited, which an automated test has no inbox or console
+  output to parse. Rather than querying Better Auth's internal `verification` table directly (
+  coupling a test to its internal schema), `auth.ts` now reads
+  `requireEmailVerification: process.env.NODE_ENV !== 'test'` — Jest sets `NODE_ENV=test`
+  automatically, and the e2e spec also passes it explicitly to the spawned server's `env`. Verified
+  both directions live: a real (non-test) `node dist/main.js` still returns
+  `403 EMAIL_NOT_VERIFIED` on an unverified sign-in exactly as before; only the spawned e2e-test
+  server skips it.
+- **The Jest test *process itself* never loads `.env`** — only the spawned server does, via its own
+  `main.ts`'s `import 'dotenv/config'`. `golden-path.e2e-spec.ts`'s own `PrismaClient` (used only
+  for the RBAC test's role downgrade, connecting directly rather than through the API) reads
+  `process.env.DATABASE_URL` in the *test* process, which was `undefined` until the spec file added
+  its own `import 'dotenv/config'` at the top — surfaced as a Postgres `SASL:
+  SCRAM-SERVER-FIRST-MESSAGE: client password must be a string` error (an empty/undefined
+  connection string reaching the Postgres driver), not an obviously-about-env-vars error.
+- **Prisma 7's client takes a driver `adapter`, not a `datasourceUrl` option** — `new
+  PrismaClient({ datasourceUrl: ... })` is a pre-7 API shape and fails to typecheck
+  (`Object literal may only specify known properties`). Matches the same driver-adapter pattern
+  already used everywhere else in this bundle (`PrismaService`, `auth.ts`): `new PrismaClient({
+  adapter: new PrismaPg({ connectionString: ... }) })`.
+- **No invite-a-teammate flow exists**, so the e2e RBAC test downgrades a user's own membership
+  role directly via Prisma, connected as the migration superuser (`DATABASE_URL`, not
+  `APP_DATABASE_URL`) — the same legitimate RLS-bypass escape hatch migrations already use, applied
+  here for test setup rather than schema changes. Never do this from real application code.
+- **Verified twice, from a clean `generate()` call each time**, with zero manual patches applied to
+  the second pass: `pnpm install` → build `packages/shared` → Docker Postgres →
+  `postInstall.ts`'s migration steps by hand → `pnpm test` (7 unit tests) → `nest build` →
+  `pnpm test:e2e` (4 e2e tests, two server instances spawned on different ports for the base and
+  bundle e2e specs, running concurrently without interfering) → a final manual curl confirming real
+  (non-test) signup still requires email verification.
 
 ## Injecting into a file
 

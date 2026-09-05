@@ -42,6 +42,14 @@ export const manifest: RecipeManifest = {
         // versioned in lockstep with `better-auth` itself.
         auth: '^1.7.2',
       },
+      // `@thallesp/nestjs-better-auth` ships ESM-only; Jest's CommonJS test runner can't load a
+      // real .mjs file even with a transform configured (see recipes/README.md). Redirects any
+      // unit test's import of it to a manual mock instead — real auth behavior is covered by
+      // test/golden-path.e2e-spec.ts, which spawns the real compiled server and never goes
+      // through Jest's module loader for it at all.
+      jestModuleNameMapper: {
+        '^@thallesp/nestjs-better-auth$': '<rootDir>/test/__mocks__/thallesp-nestjs-better-auth.ts',
+      },
     },
     app: {
       dependencies: {
