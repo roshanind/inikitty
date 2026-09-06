@@ -62,9 +62,11 @@ jobs:
       matrix:
         bundle: ${{ fromJson(needs.discover-bundles.outputs.bundles) }}
     env:
-      # Outside the checked-out workspace on purpose — this is a generated, throwaway project,
-      # not part of the generator repo itself.
-      GENERATED_DIR: ${{ runner.temp }}/golden-path
+      # A plain literal path, not `${{ runner.temp }}` — that context isn't available in a
+      # job-level `env:` block. Each matrix entry gets its own isolated VM, so a fixed path is
+      # safe; it's outside the checked-out workspace on purpose, since this is a generated,
+      # throwaway project, not part of the generator repo itself.
+      GENERATED_DIR: /tmp/golden-path
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
