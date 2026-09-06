@@ -64,6 +64,7 @@ describe('real base template', () => {
       '.env.example',
       '.gitignore',
       'AGENTS.md',
+      'README.md',
     ]) {
       await expect(fs.stat(path.join(outputDir, relPath))).resolves.toBeDefined();
     }
@@ -72,6 +73,13 @@ describe('real base template', () => {
     expect(agentsMd).toContain('Smoke Test App');
     expect(agentsMd).toContain('Never commit `.env`');
     expect(agentsMd).not.toContain('@inikitty:inject:');
+
+    const readmeMd = await fs.readFile(path.join(outputDir, 'README.md'), 'utf8');
+    expect(readmeMd).toContain('Smoke Test App');
+    expect(readmeMd).toContain('cd api && pnpm dev');
+    expect(readmeMd).not.toContain('@inikitty:inject:');
+
+    await expect(fs.stat(path.join(outputDir, 'ARCHITECTURE.md'))).rejects.toThrow();
 
     const apiPkg = JSON.parse(await fs.readFile(path.join(outputDir, 'api', 'package.json'), 'utf8'));
     expect(apiPkg.name).toBe('smoke-test-app-api');
@@ -109,7 +117,7 @@ describe('real base template', () => {
     expect(appTsx).toContain("const projectName = 'Smoke Test App';");
   });
 
-  it('generates a well-formed project with the real golden-path bundle + jwt-plugin selected', async () => {
+  it('generates a well-formed project with the real golden-path bundle + jwt-plugin + claude-code selected', async () => {
     const outputDir = await freshOutputDir();
 
     const result = await generate({
@@ -117,12 +125,14 @@ describe('real base template', () => {
       recipesDir,
       outputDir,
       projectName: 'Auth Smoke App',
-      selection: { bundle: 'prisma-betterauth-casl-stripe', categories: ['jwt-plugin'] },
+      selection: { bundle: 'prisma-betterauth-casl-stripe', categories: ['jwt-plugin', 'claude-code'] },
       runPostInstall: false, // postInstall needs Docker + installed deps; covered by manual e2e verification
     });
 
+    // Bundle-first, then alphabetical by category-then-id: 'ai-format' sorts before 'auth-extra'.
     expect(result.appliedRecipes.map((r) => r.manifest.id)).toEqual([
       'prisma-betterauth-casl-stripe',
+      'claude-code',
       'jwt-plugin',
     ]);
 
@@ -157,6 +167,8 @@ describe('real base template', () => {
       'api/test/golden-path.e2e-spec.ts',
       'api/test/__mocks__/thallesp-nestjs-better-auth.ts',
       'docs/adding-a-resource.md',
+      'ARCHITECTURE.md',
+      'CLAUDE.md',
       'pnpm-workspace.yaml',
       'packages/shared/package.json',
       'packages/shared/tsconfig.json',
@@ -263,6 +275,7 @@ describe('real base template', () => {
     expect(appPkg.dependencies['@mui/material']).toBeDefined();
     expect(appPkg.dependencies['@emotion/react']).toBeDefined();
     expect(appPkg.dependencies['@emotion/styled']).toBeDefined();
+    expect(appPkg.dependencies.zod).toBeDefined();
 
     const loginPageTsx = await fs.readFile(
       path.join(outputDir, 'app', 'src', 'features', 'auth', 'LoginPage.tsx'),
@@ -298,5 +311,20 @@ describe('real base template', () => {
     // addendum, and both before the base template's own trailing guardrails section.
     expect(agentsMd.indexOf('## Stack')).toBeLessThan(agentsMd.indexOf('## JWT plugin'));
     expect(agentsMd.indexOf('## JWT plugin')).toBeLessThan(agentsMd.indexOf('Never remove'));
+
+    const readmeMd = await fs.readFile(path.join(outputDir, 'README.md'), 'utf8');
+    expect(readmeMd).toContain('Auth Smoke App');
+    expect(readmeMd).toContain('docker compose up -d');
+    expect(readmeMd).toContain('ARCHITECTURE.md');
+    expect(readmeMd).toContain('cd api && pnpm dev');
+    expect(readmeMd).not.toContain('@inikitty:inject:');
+
+    const architectureMd = await fs.readFile(path.join(outputDir, 'ARCHITECTURE.md'), 'utf8');
+    expect(architectureMd).toContain('Auth Smoke App');
+    expect(architectureMd).toContain('```mermaid');
+    expect(architectureMd).toContain('TenantContext.getPrisma()');
+
+    const claudeMd = await fs.readFile(path.join(outputDir, 'CLAUDE.md'), 'utf8');
+    expect(claudeMd).toContain('[`AGENTS.md`](./AGENTS.md)');
   });
 });

@@ -61,6 +61,14 @@ export const manifest: RecipeManifest = {
         'react-router-dom': '^7.18.3',
         '@tanstack/react-query': '^5.102.8',
         'better-auth': '^1.7.2',
+        // `app/`'s better-auth resolves as a different peer-variant than `api/`'s (api/ also has
+        // @prisma/client/pg/prisma as peers, app/ doesn't) — pnpm gives each variant its own
+        // independently-resolved copy of better-auth's internal zod dependency, and the two can
+        // land on different patch versions even with byte-identical semver ranges everywhere.
+        // Pinning zod directly here too (matching api/'s own pin) collapses both variants back to
+        // one shared zod install — verified via a real `pnpm install` + `pnpm why zod`, not
+        // assumed; without this, `nest build` fails with TS2742 on `auth.ts`'s inferred type.
+        zod: '^4.3.6',
         // UI library for the golden path (Phase 1 bakes in one default — see
         // docs/product-scope.md §12; a pluggable UI-library *choice* is Phase 2).
         '@mui/material': '^9.4.0',

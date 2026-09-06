@@ -38,10 +38,22 @@
   signup → CRUD → cross-tenant → RBAC flow above over real HTTP against a real Postgres). See the
   testing gotchas below for what building this uncovered — several more real, previously-latent
   bugs, on top of the ones already listed for each earlier slice.
+
+  The bundle also assembles real `AGENTS.md`/`README.md` content (via the base template's own
+  marker-injection mechanism — see the `AGENTS.md`/README gotchas below) and ships `ARCHITECTURE.md`
+  directly (no base-template involvement — it's meaningless without a real stack). This is what
+  closes out Phase 1 per `docs/product-scope.md` §12: every item on that checklist is now real,
+  not placeholder text.
 - **`auth-extra/jwt-plugin`** — optional, off by default, `requires` the bundle above. Adds Better
   Auth's `jwt()`/`bearer()` plugins so a `GET /auth/token` endpoint can mint a signed JWT from the
   active session, for callers other than this API that need to verify identity independently. Purely
   additive — the native cookie session works identically whether or not this is selected.
+- **`ai-format/claude-code`** — optional, off by default, no `requires` (works with or without any
+  bundle, since `AGENTS.md` always exists). Generates a thin `CLAUDE.md` at the project root that
+  points at `AGENTS.md` — the "at least one working vendor-shim recipe" §12 calls for to validate
+  the category mechanism end-to-end. No real content lives in `CLAUDE.md` itself, by design (see
+  `docs/product-scope.md` §11's own warning against a shim duplicating — and drifting from — the
+  real source of truth).
 
 The generator engine (`src/engine/`) is built against the contract below and is unit-tested against
 small fixture recipes in `tests/fixtures/recipes/` (kept deliberately separate from the recipes
@@ -518,6 +530,45 @@ config-format-specific set of gotchas in the whole bundle so far.
   copied) into `recipes/bundle/prisma-betterauth-casl-stripe/files/docs/adding-a-resource.md` — one
   source, and it's the one that ships, per `docs/product-scope.md` §11's own warning against a
   duplicated copy drifting out of sync.
+
+## Gotchas hit while adding `README.md`/`ARCHITECTURE.md`/the `claude-code` shim
+
+- **`README.md` reuses the exact same base-skeleton-plus-marker approach as `AGENTS.md`** — two
+  markers this time (`setup-steps`, mid-document, and `learn-more-links`, at the very end), since
+  the "Getting started" instructions and the "Learn more" links both need bundle-specific
+  content inserted at different points in an otherwise-generic document. No new engine mechanism
+  needed, same as `AGENTS.md`.
+- **A marker's snippet needs a *leading* blank line only when something else might land on the
+  same marker and needs separating from it — not by default.** Copying the `AGENTS.md` fix
+  (leading blank line) onto `setup-steps`/`learn-more-links` unconditionally produced a double
+  blank line in one spot and an unwanted loose-list gap in the other, since each of those markers
+  only has *one* contributor (the bundle) — the base template's own existing blank-line-before/
+  blank-line-after-marker formatting already provides correct separation for a single contributor.
+  Only add the leading-blank-line trick when a marker is genuinely shared by more than one recipe.
+- **`ARCHITECTURE.md` has no base-template involvement at all** — unlike `AGENTS.md`/`README.md`,
+  there's nothing generic to say about "the tenancy → auth → RBAC → data access flow" without a
+  real stack, so it's a plain file the bundle ships directly via `files/ARCHITECTURE.md`, with no
+  marker and no no-bundle fallback. Confirmed the no-bundle smoke test case asserts it does *not*
+  exist in that case.
+- **`app/`'s `better-auth` resolves as a different pnpm peer-variant than `api/`'s** (`api/` also
+  has `@prisma/client`/`pg`/`prisma` as peers that `app/` doesn't), and pnpm gives each variant its
+  own independently-resolved copy of better-auth's internal `zod` dependency — the two can land on
+  different patch versions even though every declared range is byte-identical (`^4.3.6`
+  everywhere). This is the exact "TS2742: inferred type of 'auth' cannot be named" failure already
+  documented in the auth+Prisma gotchas above, resurfacing for a *different* underlying reason
+  (peer-variant divergence, not a stale/mismatched range) — caught only by a real `nest build` in a
+  freshly, fully-clean-installed generated project (an *incremental* reinstall on top of stale
+  `node_modules` masked it during initial investigation: pnpm doesn't always prune
+  now-orphaned `.pnpm` store entries from a prior install, which looked identical to the real bug
+  until a genuinely clean `rm -rf node_modules && pnpm install` reproduced it independent of that
+  noise). Fixed by pinning `zod` as a direct dependency of `app/` too (matching `api/`'s existing
+  pin) — verified via `pnpm why zod` showing exactly one resolved copy, and a clean `nest build`
+  with zero errors, from a fully clean install.
+- **Verified via a complete clean-room pass**: fresh `generate()` → clean `pnpm install` (no
+  leftover `node_modules` from prior attempts) → confirmed exactly one `zod` in
+  `node_modules/.pnpm` → Docker Postgres → full migration sequence → `pnpm test` (7 unit tests) →
+  `nest build` (zero errors) → `pnpm test:e2e` (4 e2e tests, real HTTP, real Postgres) → `tsc -b` +
+  `vite build` in `app/` (both clean).
 
 ## Injecting into a file
 
