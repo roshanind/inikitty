@@ -498,6 +498,27 @@ config-format-specific set of gotchas in the whole bundle so far.
   transformed page modules** — the same bar as the earlier FE verification in the Projects slice.
   No browser-automation tooling was available to visually confirm rendering.
 
+## Gotchas hit while adding `AGENTS.md`
+
+- **Multiple recipes contributing to the same marker in the same file needed zero engine
+  changes** — `inject.ts`'s existing behavior ("recipes applied later land below recipes applied
+  earlier, both spliced above the marker") already supported this; it just hadn't been exercised by
+  more than one recipe targeting the same file before. Both `prisma-betterauth-casl-stripe` and
+  `auth-extra/jwt-plugin` target `AGENTS.md.inject/agents-sections.md`, and land in bundle-first
+  order (matching `resolve.ts`'s resolution order) automatically.
+- **Two snippets on the same marker concatenate with no blank line between them by default** —
+  `applyInjections` strips each snippet's *trailing* newlines before splicing, so snippet N's last
+  line and snippet N+1's first line end up adjacent. Fixed by giving `jwt-plugin`'s snippet a
+  **leading** blank line in its own source file — the strip regex (`/\n+$/`) only matches the end
+  of the string, so a leading blank line survives and provides the separation. Any future recipe
+  contributing to a marker another recipe might also target should do the same.
+- **`docs/adding-a-resource.md` had never actually been shipped into generated projects** — it was
+  written (during the Projects slice) as a file in this generator repo's own `docs/`, which `AGENTS.md`
+  could reference by path but which never actually existed in a real generated project. Moved (not
+  copied) into `recipes/bundle/prisma-betterauth-casl-stripe/files/docs/adding-a-resource.md` — one
+  source, and it's the one that ships, per `docs/product-scope.md` §11's own warning against a
+  duplicated copy drifting out of sync.
+
 ## Injecting into a file
 
 If the target file (e.g. `templates/base/api/src/app.module.ts`) contains a marker comment:

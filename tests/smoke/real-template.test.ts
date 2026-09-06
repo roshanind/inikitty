@@ -63,9 +63,15 @@ describe('real base template', () => {
       'app/src/App.tsx',
       '.env.example',
       '.gitignore',
+      'AGENTS.md',
     ]) {
       await expect(fs.stat(path.join(outputDir, relPath))).resolves.toBeDefined();
     }
+
+    const agentsMd = await fs.readFile(path.join(outputDir, 'AGENTS.md'), 'utf8');
+    expect(agentsMd).toContain('Smoke Test App');
+    expect(agentsMd).toContain('Never commit `.env`');
+    expect(agentsMd).not.toContain('@inikitty:inject:');
 
     const apiPkg = JSON.parse(await fs.readFile(path.join(outputDir, 'api', 'package.json'), 'utf8'));
     expect(apiPkg.name).toBe('smoke-test-app-api');
@@ -150,6 +156,7 @@ describe('real base template', () => {
       'api/src/projects/projects.service.spec.ts',
       'api/test/golden-path.e2e-spec.ts',
       'api/test/__mocks__/thallesp-nestjs-better-auth.ts',
+      'docs/adding-a-resource.md',
       'pnpm-workspace.yaml',
       'packages/shared/package.json',
       'packages/shared/tsconfig.json',
@@ -280,5 +287,16 @@ describe('real base template', () => {
 
     const compose = await fs.readFile(path.join(outputDir, 'docker-compose.yml'), 'utf8');
     expect(compose).toContain('POSTGRES_DB: auth-smoke-app');
+
+    const agentsMd = await fs.readFile(path.join(outputDir, 'AGENTS.md'), 'utf8');
+    expect(agentsMd).toContain('Auth Smoke App');
+    expect(agentsMd).toContain('TenantContext.getPrisma()');
+    expect(agentsMd).toContain('JWT plugin');
+    expect(agentsMd).toContain('Never commit `.env`');
+    expect(agentsMd).not.toContain('@inikitty:inject:');
+    // Bundle-first ordering: the bundle's real content should appear before jwt-plugin's small
+    // addendum, and both before the base template's own trailing guardrails section.
+    expect(agentsMd.indexOf('## Stack')).toBeLessThan(agentsMd.indexOf('## JWT plugin'));
+    expect(agentsMd.indexOf('## JWT plugin')).toBeLessThan(agentsMd.indexOf('Never remove'));
   });
 });

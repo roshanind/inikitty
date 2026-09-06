@@ -279,6 +279,18 @@ existing `/projects` and `/projects/:id` ones. Pages needing a session should wr
 `element` in `<RequireAuth>` (`app/src/features/auth/RequireAuth.tsx`), same as the existing
 Projects routes do.
 
+## 8. Tests
+
+Follow `src/projects/projects.service.spec.ts`'s shape for a new service: mock `TenantContext`
+entirely (`getPrisma`/`getTenantId` as jest mocks returning a fake Prisma client), and assert the
+service calls the tenant-scoped client the way it's supposed to — no real database involved.
+
+For the real signup → tenancy → RBAC flow, extend `test/golden-path.e2e-spec.ts` rather than
+writing a parallel e2e file — it already spawns the real compiled server and handles the
+sign-up/verify/sign-in boilerplate; add your resource's own CRUD/cross-tenant/RBAC assertions
+inside its existing `describe` block (or a new one in the same file) so `pnpm test:e2e` still
+exercises everything as one coherent flow.
+
 ## What to double-check before shipping a new resource
 
 - **Cross-tenant isolation**: sign up two separate users (two separate tenants), confirm tenant B
