@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  generator:
+    name: Generator (typecheck, lint, test, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 8.6.10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build
+
+  discover-bundles:
+    name: Discover bundle recipes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: generator
+    outputs:
+      bundles: ${{ steps.list.outputs.bundles }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 8.6.10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Outputs a JSON array of every discovered bundle recipe's id, so the golden-path job below
+      # runs once per bundle automatically — v1 has exactly one, but the check must already be
+      # written to cover a second one without any workflow changes (see CLAUDE.md).
+      - id: list
+        run: echo "bundles=$(pnpm exec tsx scripts/list-bundles.ts)" >> "$GITHUB_OUTPUT"
+
+  golden-path:
+    name: Golden path — ${{ matrix.bundle }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: discover-bundles
+    strategy:
+      fail-fast: false
+      matrix:
+        bundle: ${{ fromJson(needs.discover-bundles.outputs.bundles) }}
+    env:
+      # Outside the checked-out workspace on purpose — this is a generated, throwaway project,
+      # not part of the generator repo itself.
+      GENERATED_DIR: ${{ runner.temp }}/golden-path
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 8.6.10
+      # Node ≥22 for the whole job, not just the generated api/ — Better Auth's CLI (`auth
+      # generate`, run by postInstall below) depends on `Object.groupBy`, unavailable on Node 20.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Mirrors exactly what a real `npx create-inikitty` run does: generate -> copy
+      # .env.example's working local-dev defaults into api/.env -> pnpm install (once at the
+      # workspace root, since this bundle writes pnpm-workspace.yaml).
+      - name: Generate + install
+        run: >
+          pnpm exec tsx scripts/golden-path-generate.ts
+          --bundle ${{ matrix.bundle }}
+          --out ${{ env.GENERATED_DIR }}
+          --project-name "CI Golden Path"
+
+      # Runs every applied recipe's postInstall.ts in order: builds packages/shared, starts
+      # Docker Postgres (docker compose up -d, using the recipe's own generated
+      # docker-compose.yml — the GitHub-hosted runner ships Docker + the Compose v2 plugin), then
+      # prisma generate / auth generate / migrate dev / the RLS migration.
+      - name: Run postInstall (Docker Postgres + migrations)
+        run: >
+          pnpm exec tsx scripts/golden-path-post-install.ts
+          --out ${{ env.GENERATED_DIR }}
+          --project-name "CI Golden Path"
+
+      - name: api — unit tests
+        working-directory: ${{ env.GENERATED_DIR }}/api
+        run: pnpm test
+
+      - name: api — build
+        working-directory: ${{ env.GENERATED_DIR }}/api
+        run: pnpm build
+
+      # test/golden-path.e2e-spec.ts spawns the just-built dist/main.js and drives real HTTP
+      # requests against the real Postgres above: signup -> verify -> session -> project CRUD ->
+      # cross-tenant isolation -> RBAC rejection for a downgraded role.
+      - name: api — e2e tests
+        working-directory: ${{ env.GENERATED_DIR }}/api
+        run: pnpm test:e2e
+
+      - name: app — typecheck + build
+        working-directory: ${{ env.GENERATED_DIR }}/app
+        run: |
+          pnpm exec tsc -b
+          pnpm exec vite build

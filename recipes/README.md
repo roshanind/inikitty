@@ -39,6 +39,13 @@
   testing gotchas below for what building this uncovered — several more real, previously-latent
   bugs, on top of the ones already listed for each earlier slice.
 
+  That test suite (and the whole "generate → install → Docker Postgres → migrate → test" flow
+  this file otherwise documents as manual) now also **runs in CI** on every push
+  (`.github/workflows/ci.yml`, matrixed over `scripts/list-bundles.ts`'s output so a second bundle
+  is covered automatically). The "verified live"/"manual" language throughout this file describes
+  how each slice was originally verified *during development* — still accurate history — not the
+  current state of whether it's automated.
+
   The bundle also assembles real `AGENTS.md`/`README.md` content (via the base template's own
   marker-injection mechanism — see the `AGENTS.md`/README gotchas below) and ships `ARCHITECTURE.md`
   directly (no base-template involvement — it's meaningless without a real stack). This is what

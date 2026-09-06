@@ -12,6 +12,6 @@
     "resolveJsonModule": true,
     "noUncheckedIndexedAccess": true
   },
-  "include": ["src", "tests", "recipes"],
+  "include": ["src", "tests", "recipes", "scripts"],
   "exclude": ["node_modules", "dist", "templates", "**/inject/**", "recipes/**/files/**"]
 }
