@@ -49,7 +49,7 @@ The generator only produces (1) and (2).
 | Validation         | class-validator + class-transformer                         | NestJS-native DTO validation and response serialization                                                              |
 | Frontend framework | Vite + React + TypeScript                                   | Plain SPA, no SSR overhead, fast dev server                                                                          |
 | Server state       | TanStack Query                                              | Standard data-fetching/caching layer for API calls                                                                   |
-| UI components      | shadcn/ui (default) with Ant Design / MUI as future options | Copy-in-source model lets generated business components sit behind a thin wrapper layer, making later swaps possible |
+| UI components      | Material UI (MUI) (default) with Ant Design / shadcn/ui as future options | Batteries-included component library — theming, forms, data display all covered out of the box, so the golden path's auth/Projects pages are fully styled without a separate design-system build step |
 | Monorepo tooling   | Turborepo (optional, prompt-gated)                          | Keeps API + app in one repo without forcing it                                                                       |
 
 ## 7. Core features — detailed spec
@@ -107,14 +107,14 @@ The generator only produces (1) and (2).
 - ORM (Prisma default; Drizzle stretch)
 - Auth provider (Better Auth only in v1)
 - Payment provider (Stripe only in v1; Paddle/Lemon Squeezy future)
-- UI library (shadcn/ui only in v1; Antd/MUI future)
+- UI library (MUI only in v1; Antd/shadcn-ui future)
 - Monorepo (yes/no, Turborepo if yes)
 - AI agent formats (multi-select, optional) — `AGENTS.md` is always generated regardless of selection; this prompt only controls which additional vendor-specific shim(s) get generated alongside it (e.g. Claude Code, Cursor, Copilot). None selected by default in v1.
 
 ### 8.2 Generation approach
 
 - One base template (minimal NestJS + Vite skeleton, nothing wired).
-- Because auth, tenancy, RBAC, and billing all touch the same request lifecycle, v1 does not treat these as independent toggles — the fully wired golden path (Prisma + Better Auth + CASL + Stripe + shadcn) is generated as a single integrated recipe.
+- Because auth, tenancy, RBAC, and billing all touch the same request lifecycle, v1 does not treat these as independent toggles — the fully wired golden path (Prisma + Better Auth + CASL + Stripe + MUI) is generated as a single integrated recipe.
 - Recipe application: copy new files as-is; for shared files (`app.module.ts`, `.env.example`, `package.json`) use marker-comment injection points that each recipe appends to, rather than blind string replacement.
 - After file generation: install only the dependencies the selected recipe needs, run initial Prisma migration against a bundled `docker-compose.yml` Postgres instance, and print next steps.
 
@@ -204,7 +204,7 @@ Since users are expected to do AI-first ("vibe coding") development with whateve
 ## 12. MVP phases
 
 **Phase 1 (golden path only):**
-NestJS + Prisma + Postgres (RLS) + Better Auth + CASL + Stripe + Vite/React + shadcn/ui, single recipe, no options prompted beyond project name. Ship this fully wired before adding any CLI branching.
+NestJS + Prisma + Postgres (RLS) + Better Auth + CASL + Stripe + Vite/React + MUI, single recipe, no options prompted beyond project name. Ship this fully wired before adding any CLI branching.
 
 Phase 1 is not considered done when the app merely runs — it is done when all of the following are true for a freshly generated project:
 
@@ -213,7 +213,7 @@ Phase 1 is not considered done when the app merely runs — it is done when all 
 - `AGENTS.md` and `docs/adding-a-resource.md` (§11) are present and reflect the actual wiring, not placeholder text. Vendor-specific shims (`CLAUDE.md`, `.cursor/rules/`, etc.) are implemented as selectable category recipes but none is required to exist by default in Phase 1 — the CLI should support the "AI agent formats" prompt with at least one working shim recipe (e.g. Claude Code) to validate the category mechanism end-to-end.
 
 **Phase 2:**
-Add ORM choice (Drizzle) and UI library choice (Antd, MUI) as alternate recipes, once Phase 1's wiring pattern is stable and covered by the CI check above.
+Add ORM choice (Drizzle) and UI library choice (Antd, shadcn/ui) as alternate recipes, once Phase 1's wiring pattern is stable and covered by the CI check above.
 
 **Phase 3:**
 Add payment provider alternatives, monorepo toggle, and subdomain-based tenant resolution as a documented alternative strategy.

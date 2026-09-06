@@ -1,5 +1,12 @@
 import { type FormEvent, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Container from '@mui/material/Container';
+import Link from '@mui/material/Link';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
 import { signIn } from '../../lib/auth-client';
 
 export function LoginPage() {
@@ -23,37 +30,38 @@ export function LoginPage() {
   }
 
   return (
-    <main style={{ fontFamily: 'sans-serif', padding: '2rem', maxWidth: 360 }}>
-      <h1>Sign in</h1>
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-        <label>
-          Email
-          <input
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            required
-            style={{ display: 'block', width: '100%' }}
-          />
-        </label>
-        <label>
-          Password
-          <input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-            style={{ display: 'block', width: '100%' }}
-          />
-        </label>
-        {error && <p style={{ color: 'crimson' }}>{error}</p>}
-        <button type="submit" disabled={submitting}>
+    <Container maxWidth="xs" sx={{ py: 8 }}>
+      <Typography variant="h4" component="h1" gutterBottom>
+        Sign in
+      </Typography>
+      <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <TextField
+          label="Email"
+          type="email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          required
+          fullWidth
+        />
+        <TextField
+          label="Password"
+          type="password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          required
+          fullWidth
+        />
+        {error && <Alert severity="error">{error}</Alert>}
+        <Button type="submit" variant="contained" disabled={submitting}>
           {submitting ? 'Signing in…' : 'Sign in'}
-        </button>
-      </form>
-      <p>
-        No account? <Link to="/signup">Sign up</Link>
-      </p>
-    </main>
+        </Button>
+      </Box>
+      <Typography sx={{ mt: 2 }}>
+        No account?{' '}
+        <Link component={RouterLink} to="/signup">
+          Sign up
+        </Link>
+      </Typography>
+    </Container>
   );
 }

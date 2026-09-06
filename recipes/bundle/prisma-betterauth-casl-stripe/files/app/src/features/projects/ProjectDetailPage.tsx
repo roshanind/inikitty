@@ -1,4 +1,8 @@
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
+import Button from '@mui/material/Button';
+import Container from '@mui/material/Container';
+import Link from '@mui/material/Link';
+import Typography from '@mui/material/Typography';
 import { Action } from '{{projectNameKebab}}-shared';
 import { useAbility } from '../../lib/use-ability';
 import { useDeleteProject, useProject } from './api';
@@ -11,14 +15,20 @@ export function ProjectDetailPage() {
   const ability = useAbility();
 
   if (isLoading) {
-    return <p style={{ fontFamily: 'sans-serif', padding: '2rem' }}>Loading…</p>;
+    return (
+      <Container maxWidth="sm" sx={{ py: 6 }}>
+        <Typography>Loading…</Typography>
+      </Container>
+    );
   }
   if (!project) {
     return (
-      <main style={{ fontFamily: 'sans-serif', padding: '2rem' }}>
-        <p>Project not found.</p>
-        <Link to="/projects">Back to projects</Link>
-      </main>
+      <Container maxWidth="sm" sx={{ py: 6 }}>
+        <Typography gutterBottom>Project not found.</Typography>
+        <Link component={RouterLink} to="/projects">
+          Back to projects
+        </Link>
+      </Container>
     );
   }
 
@@ -28,18 +38,28 @@ export function ProjectDetailPage() {
   }
 
   return (
-    <main style={{ fontFamily: 'sans-serif', padding: '2rem', maxWidth: 480 }}>
-      <p>
-        <Link to="/projects">← Back to projects</Link>
-      </p>
-      <h1>{project.name}</h1>
-      <p>Created {new Date(project.createdAt).toLocaleString()}</p>
+    <Container maxWidth="sm" sx={{ py: 6 }}>
+      <Link component={RouterLink} to="/projects" sx={{ display: 'inline-block', mb: 2 }}>
+        ← Back to projects
+      </Link>
+      <Typography variant="h4" component="h1" gutterBottom>
+        {project.name}
+      </Typography>
+      <Typography color="text.secondary" gutterBottom>
+        Created {new Date(project.createdAt).toLocaleString()}
+      </Typography>
 
       {ability?.can(Action.Delete, 'Project') && (
-        <button onClick={handleDelete} disabled={deleteProject.isPending}>
+        <Button
+          color="error"
+          variant="outlined"
+          onClick={handleDelete}
+          disabled={deleteProject.isPending}
+          sx={{ mt: 2 }}
+        >
           {deleteProject.isPending ? 'Deleting…' : 'Delete project'}
-        </button>
+        </Button>
       )}
-    </main>
+    </Container>
   );
 }

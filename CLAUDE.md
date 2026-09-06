@@ -69,7 +69,7 @@ Three independently deployable pieces, of which the generator produces only the 
 | Validation | class-validator + class-transformer |
 | Frontend | Vite + React + TypeScript |
 | Server state | TanStack Query |
-| UI components | shadcn/ui (default) |
+| UI components | Material UI (MUI) (default) |
 | Monorepo | Turborepo (optional, prompt-gated) |
 
 ### The recipe/bundle system (core generator architecture)
@@ -137,6 +137,12 @@ Engine unit tests use small fixture recipes in `tests/fixtures/` (not real produ
 - **`GET /auth/get-session` (what `useSession()` polls) returns the literal JSON value `null`, not `undefined` or an empty object, when there's no session** — verified against a real response, not assumed from the client library's types. `RequireAuth` checks `!data`, not `!data?.session`.
 - **Signup doesn't yield a usable session immediately** — `requireEmailVerification: true` (set in the auth slice) means the session from `POST /auth/sign-up/email` can't authenticate anything until the verification link is visited; since email delivery is a `console.log` stub, `SignupPage` shows an explicit "check the API's console" message rather than silently redirecting to a login that would just fail.
 
+### UI design decisions (apply to `prisma-betterauth-casl-stripe` and anything built on it)
+
+- **MUI is baked directly into the bundle's own FE pages, not a separate pluggable category recipe** — per `docs/product-scope.md` §12, a UI library *choice* (Antd, shadcn/ui as alternates) is explicitly Phase 2 scope; Phase 1 bakes in exactly one default. This means `LoginPage`/`SignupPage`/`ProjectsListPage`/`ProjectDetailPage`/`RequireAuth` all import MUI components directly, and `app/package.json` gets `@mui/material`/`@emotion/react`/`@emotion/styled` unconditionally whenever this bundle is selected — there's no world where the bundle is selected and MUI isn't. If a real "UI library choice" prompt is ever built (Phase 2), expect this to require restructuring these page files, not just adding a sibling recipe alongside an unstyled version — there was never an unstyled version to begin with.
+- **`ThemeProvider`/`CssBaseline` are wired into `main.tsx`'s existing `providers-open`/`providers-close` markers** (added by the earlier Projects slice for `QueryClientProvider`/`BrowserRouter`) — no new markers were needed, since this is the same recipe extending its own previously-added wrap point. `ThemeProvider` is the outermost wrap so theme context reaches everything, including the base template's own unstyled placeholder home page (which still renders as plain HTML — only this bundle's own injected `home-links` nav actually uses MUI components).
+- **The base template's `app/` has zero UI-library dependency of its own** — the "no bundle selected" case never installs MUI, matching the recipe/bundle system's own rule that the engine (and by extension the base template) must never hardcode knowledge of a specific tool.
+
 ### Multi-tenancy, RBAC, and DTO conventions (apply inside generated projects)
 
 These are hard constraints the generator must bake into every generated project, and that anyone editing recipe templates must preserve:
@@ -164,6 +170,6 @@ Test-first at two levels:
 
 ## MVP phasing
 
-Phase 1 is golden-path only: NestJS + Prisma + Postgres (RLS) + Better Auth + CASL + Stripe + Vite/React + shadcn/ui, single recipe, no CLI branching beyond project name. It's not "done" when the app merely runs — it requires the full generated test suite passing, `README.md`/`ARCHITECTURE.md`/`/api/docs` present and accurate, and `AGENTS.md` + `docs/adding-a-resource.md` present and reflecting real wiring (see `docs/product-scope.md` §12 for the full checklist). Done so far: `docs/adding-a-resource.md` (written against the real `Project` implementation, not speculatively), and the generated project's own automated test suite (unit + e2e, passing, live-verified). Still outstanding: `README.md`/`ARCHITECTURE.md` assembly, `AGENTS.md` generation, and `shadcn/ui` (the one stack-table item with no recipe yet) — so Phase 1 isn't fully closed out even though the bundle itself is feature-complete and tested.
+Phase 1 is golden-path only: NestJS + Prisma + Postgres (RLS) + Better Auth + CASL + Stripe + Vite/React + MUI, single recipe, no CLI branching beyond project name. It's not "done" when the app merely runs — it requires the full generated test suite passing, `README.md`/`ARCHITECTURE.md`/`/api/docs` present and accurate, and `AGENTS.md` + `docs/adding-a-resource.md` present and reflecting real wiring (see `docs/product-scope.md` §12 for the full checklist). Done so far: `docs/adding-a-resource.md` (written against the real `Project` implementation, not speculatively), the generated project's own automated test suite (unit + e2e, passing, live-verified), and MUI (baked directly into the bundle's own FE pages, not a separate pluggable recipe — per §12, UI library *choice* is explicitly Phase 2; Phase 1 bakes in one default). Still outstanding: `README.md`/`ARCHITECTURE.md` assembly and `AGENTS.md` generation.
 
 For anything not covered here — exact endpoint list, full tech-stack rationale, CLI prompt flow, open questions — read [docs/product-scope.md](docs/product-scope.md) directly; it is the authoritative spec until real code exists.

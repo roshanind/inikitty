@@ -1,2 +1,3 @@
 </BrowserRouter>
 </QueryClientProvider>
+</ThemeProvider>

@@ -11,10 +11,12 @@
   the CASL gotchas below), Stripe billing (`api/src/billing/`: `POST /billing/checkout` and
   `POST /billing/portal` — both owner-only via `@CheckPolicies()` — plus a public, signature-verified
   `POST /billing/webhook` that syncs a `Subscription` table, and a `@RequiresActiveSubscription()`
-  guard for gating premium routes — see the billing gotchas below), and the `Projects` example
+  guard for gating premium routes — see the billing gotchas below), the `Projects` example
   resource (`api/src/projects/` + `app/src/features/projects/`: tenant-scoped, RBAC-guarded,
   DTO-validated CRUD with FE list/create/detail pages — see the Projects gotchas below and
-  `docs/adding-a-resource.md` for the full worked-example walkthrough).
+  `docs/adding-a-resource.md` for the full worked-example walkthrough), and Material UI (all FE
+  pages built with real MUI components, not raw HTML — see the UI gotchas below for why this is
+  baked into the bundle rather than a separate pluggable recipe).
 
   Everything above has been **verified live**, not just via generation/typecheck/build: a real
   generated project, installed for real, migrated against a real Dockerized Postgres, started with
@@ -476,6 +478,25 @@ config-format-specific set of gotchas in the whole bundle so far.
   `pnpm test:e2e` (4 e2e tests, two server instances spawned on different ports for the base and
   bundle e2e specs, running concurrently without interfering) → a final manual curl confirming real
   (non-test) signup still requires email verification.
+
+## Gotchas hit while adding Material UI
+
+- **MUI is baked directly into this bundle's own page files, not shipped as a separate `ui/mui`
+  category recipe.** `docs/product-scope.md` §12 frames a pluggable UI-library *choice* as Phase 2
+  scope; Phase 1 bakes in exactly one default. A separate category recipe would also have needed to
+  *replace* `LoginPage.tsx`/`SignupPage.tsx`/etc., which `apply.ts`'s `copyTree` can't do (it throws
+  on any file collision between recipes/base) — there was no unstyled version of these pages to
+  begin with, so there was nothing for a separate recipe to layer on top of.
+- **`ThemeProvider`/`CssBaseline` reuse the `providers-open`/`providers-close` marker pair the
+  Projects slice already added** to `main.tsx` for `QueryClientProvider`/`BrowserRouter` — extending
+  a recipe's own previously-added marker content needs no engine or base-template change at all,
+  just editing the recipe's own inject snippets.
+- **MUI v9's `TextField` takes HTML input attributes via `slotProps={{ htmlInput: {...} }}`, not
+  the older `inputProps={{...}}`** (used for `SignupPage`'s password `minLength`) — verified against
+  a real `tsc -b` in a generated project, not assumed from memory of older MUI versions.
+- **Verified via `tsc -b` + `vite build` (both clean) and by fetching the Vite dev server's actual
+  transformed page modules** — the same bar as the earlier FE verification in the Projects slice.
+  No browser-automation tooling was available to visually confirm rendering.
 
 ## Injecting into a file
 

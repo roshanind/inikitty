@@ -1,4 +1,6 @@
-import { Link, Route, Routes } from 'react-router-dom';
+import { Link as RouterLink, Route, Routes } from 'react-router-dom';
+import Link from '@mui/material/Link';
+import Stack from '@mui/material/Stack';
 import { LoginPage } from './features/auth/LoginPage';
 import { RequireAuth } from './features/auth/RequireAuth';
 import { SignupPage } from './features/auth/SignupPage';

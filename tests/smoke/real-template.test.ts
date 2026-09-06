@@ -213,6 +213,8 @@ describe('real base template', () => {
     const mainTsx = await fs.readFile(path.join(outputDir, 'app', 'src', 'main.tsx'), 'utf8');
     expect(mainTsx).toContain('QueryClientProvider');
     expect(mainTsx).toContain('BrowserRouter');
+    expect(mainTsx).toContain('ThemeProvider');
+    expect(mainTsx).toContain('CssBaseline');
     expect(mainTsx).not.toContain('@inikitty:inject:');
 
     const sharedPkgJson = JSON.parse(
@@ -251,6 +253,15 @@ describe('real base template', () => {
     expect(appPkg.dependencies['react-router-dom']).toBeDefined();
     expect(appPkg.dependencies['@tanstack/react-query']).toBeDefined();
     expect(appPkg.dependencies['better-auth']).toBeDefined();
+    expect(appPkg.dependencies['@mui/material']).toBeDefined();
+    expect(appPkg.dependencies['@emotion/react']).toBeDefined();
+    expect(appPkg.dependencies['@emotion/styled']).toBeDefined();
+
+    const loginPageTsx = await fs.readFile(
+      path.join(outputDir, 'app', 'src', 'features', 'auth', 'LoginPage.tsx'),
+      'utf8',
+    );
+    expect(loginPageTsx).toContain("from '@mui/material/TextField'");
 
     const sharedPkg = JSON.parse(
       await fs.readFile(path.join(outputDir, 'packages', 'shared', 'package.json'), 'utf8'),

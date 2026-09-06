@@ -1,5 +1,13 @@
 import { type FormEvent, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link as RouterLink } from 'react-router-dom';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Container from '@mui/material/Container';
+import List from '@mui/material/List';
+import ListItemButton from '@mui/material/ListItemButton';
+import ListItemText from '@mui/material/ListItemText';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
 import { Action } from '{{projectNameKebab}}-shared';
 import { useAbility } from '../../lib/use-ability';
 import { useCreateProject, useProjects } from './api';
@@ -22,32 +30,35 @@ export function ProjectsListPage() {
   }
 
   return (
-    <main style={{ fontFamily: 'sans-serif', padding: '2rem', maxWidth: 480 }}>
-      <h1>Projects</h1>
+    <Container maxWidth="sm" sx={{ py: 6 }}>
+      <Typography variant="h4" component="h1" gutterBottom>
+        Projects
+      </Typography>
 
       {ability?.can(Action.Create, 'Project') && (
-        <form onSubmit={handleCreate} style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
-          <input
+        <Box component="form" onSubmit={handleCreate} sx={{ display: 'flex', gap: 1, mb: 3 }}>
+          <TextField
             value={name}
             onChange={(event) => setName(event.target.value)}
             placeholder="New project name"
-            style={{ flex: 1 }}
+            size="small"
+            fullWidth
           />
-          <button type="submit" disabled={createProject.isPending}>
+          <Button type="submit" variant="contained" disabled={createProject.isPending}>
             Create
-          </button>
-        </form>
+          </Button>
+        </Box>
       )}
 
-      {isLoading && <p>Loading…</p>}
-      {projects?.length === 0 && <p>No projects yet.</p>}
-      <ul style={{ listStyle: 'none', padding: 0 }}>
+      {isLoading && <Typography>Loading…</Typography>}
+      {projects?.length === 0 && <Typography color="text.secondary">No projects yet.</Typography>}
+      <List disablePadding>
         {projects?.map((project) => (
-          <li key={project.id} style={{ padding: '0.5rem 0', borderBottom: '1px solid #ddd' }}>
-            <Link to={`/projects/${project.id}`}>{project.name}</Link>
-          </li>
+          <ListItemButton key={project.id} component={RouterLink} to={`/projects/${project.id}`} divider>
+            <ListItemText primary={project.name} />
+          </ListItemButton>
         ))}
-      </ul>
-    </main>
+      </List>
+    </Container>
   );
 }

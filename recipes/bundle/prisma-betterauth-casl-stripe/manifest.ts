@@ -4,10 +4,11 @@ export const manifest: RecipeManifest = {
   id: 'prisma-betterauth-casl-stripe',
   category: 'bundle',
   description:
-    'Golden-path bundle: Prisma + Postgres, Better Auth, CASL, and Stripe wired end to end. ' +
-    'Implements auth + Prisma, multi-tenancy (Postgres RLS), CASL RBAC enforcement, Stripe billing ' +
-    '(Checkout, Customer Portal, webhook-driven Subscription sync), and the Projects example ' +
-    'resource (tenant-scoped, RBAC-guarded CRUD with FE list/create/detail pages) end to end.',
+    'Golden-path bundle: Prisma + Postgres, Better Auth, CASL, Stripe, and Material UI wired end ' +
+    'to end. Implements auth + Prisma, multi-tenancy (Postgres RLS), CASL RBAC enforcement, ' +
+    'Stripe billing (Checkout, Customer Portal, webhook-driven Subscription sync), and the ' +
+    'Projects example resource (tenant-scoped, RBAC-guarded CRUD with MUI-based FE ' +
+    'list/create/detail pages) end to end.',
   packageJsonPatch: {
     api: {
       dependencies: {
@@ -60,6 +61,11 @@ export const manifest: RecipeManifest = {
         'react-router-dom': '^7.18.3',
         '@tanstack/react-query': '^5.102.8',
         'better-auth': '^1.7.2',
+        // UI library for the golden path (Phase 1 bakes in one default — see
+        // docs/product-scope.md §12; a pluggable UI-library *choice* is Phase 2).
+        '@mui/material': '^9.4.0',
+        '@emotion/react': '^11.14.0',
+        '@emotion/styled': '^11.14.1',
       },
     },
   },

@@ -1,5 +1,12 @@
 import { type FormEvent, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link as RouterLink } from 'react-router-dom';
+import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Container from '@mui/material/Container';
+import Link from '@mui/material/Link';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
 import { signUp } from '../../lib/auth-client';
 
 export function SignupPage() {
@@ -28,60 +35,64 @@ export function SignupPage() {
 
   if (done) {
     return (
-      <main style={{ fontFamily: 'sans-serif', padding: '2rem', maxWidth: 360 }}>
-        <h1>Check your email</h1>
-        <p>
+      <Container maxWidth="xs" sx={{ py: 8 }}>
+        <Typography variant="h4" component="h1" gutterBottom>
+          Check your email
+        </Typography>
+        <Typography>
           We sent a verification link to <strong>{email}</strong>. In local dev, the API's own
           console logs it (email delivery is a stub — see <code>auth.ts</code>) — open the link
-          there, then <Link to="/login">sign in</Link>.
-        </p>
-      </main>
+          there, then{' '}
+          <Link component={RouterLink} to="/login">
+            sign in
+          </Link>
+          .
+        </Typography>
+      </Container>
     );
   }
 
   return (
-    <main style={{ fontFamily: 'sans-serif', padding: '2rem', maxWidth: 360 }}>
-      <h1>Sign up</h1>
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-        <label>
-          Name
-          <input
-            type="text"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            required
-            style={{ display: 'block', width: '100%' }}
-          />
-        </label>
-        <label>
-          Email
-          <input
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            required
-            style={{ display: 'block', width: '100%' }}
-          />
-        </label>
-        <label>
-          Password
-          <input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-            minLength={8}
-            style={{ display: 'block', width: '100%' }}
-          />
-        </label>
-        {error && <p style={{ color: 'crimson' }}>{error}</p>}
-        <button type="submit" disabled={submitting}>
+    <Container maxWidth="xs" sx={{ py: 8 }}>
+      <Typography variant="h4" component="h1" gutterBottom>
+        Sign up
+      </Typography>
+      <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <TextField
+          label="Name"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          required
+          fullWidth
+        />
+        <TextField
+          label="Email"
+          type="email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          required
+          fullWidth
+        />
+        <TextField
+          label="Password"
+          type="password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          required
+          slotProps={{ htmlInput: { minLength: 8 } }}
+          fullWidth
+        />
+        {error && <Alert severity="error">{error}</Alert>}
+        <Button type="submit" variant="contained" disabled={submitting}>
           {submitting ? 'Creating account…' : 'Sign up'}
-        </button>
-      </form>
-      <p>
-        Already have an account? <Link to="/login">Sign in</Link>
-      </p>
-    </main>
+        </Button>
+      </Box>
+      <Typography sx={{ mt: 2 }}>
+        Already have an account?{' '}
+        <Link component={RouterLink} to="/login">
+          Sign in
+        </Link>
+      </Typography>
+    </Container>
   );
 }
