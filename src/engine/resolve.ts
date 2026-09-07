@@ -54,6 +54,13 @@ export function resolveRecipes(
       );
     }
 
+    const anyOf = recipe.manifest.requiresAnyOf ?? [];
+    if (anyOf.length > 0 && !anyOf.some((req) => selectedIds.has(req))) {
+      throw new RecipeResolutionError(
+        `Recipe "${id}" requires one of ${anyOf.map((r) => `"${r}"`).join(', ')}, none of which are selected.`,
+      );
+    }
+
     for (const conflictId of recipe.manifest.conflicts ?? []) {
       if (selectedIds.has(conflictId)) {
         throw new RecipeResolutionError(`Recipe "${id}" conflicts with selected recipe "${conflictId}".`);

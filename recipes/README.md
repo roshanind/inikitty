@@ -51,7 +51,16 @@
   directly (no base-template involvement — it's meaningless without a real stack). This is what
   closes out Phase 1 per `docs/product-scope.md` §12: every item on that checklist is now real,
   not placeholder text.
-- **`auth-extra/jwt-plugin`** — optional, off by default, `requires` the bundle above. Adds Better
+- **`bundle/drizzle-betterauth-casl-stripe`** — a second golden-path bundle, implementing the
+  identical guarantees as the Prisma bundle above (same RLS policies, same CASL rules, same
+  DTO/RBAC/testing conventions, same `Projects` worked example) against Drizzle instead of Prisma.
+  `packages/shared` (CASL rules) and every FE file are reused byte-for-byte from the Prisma bundle —
+  neither has any ORM dependency. The two bundles are mutually exclusive (the engine only ever
+  allows one `bundle`-category recipe selected at a time); pick this one for Drizzle, the other for
+  Prisma. See the Drizzle gotchas below for where its design genuinely diverges (there's no
+  Prisma-Client-Extension equivalent in Drizzle) and two real, live-verification-caught bugs.
+- **`auth-extra/jwt-plugin`** — optional, off by default, `requiresAnyOf` either bundle above (its
+  `auth.ts` markers exist identically in both — nothing about it is ORM-specific). Adds Better
   Auth's `jwt()`/`bearer()` plugins so a `GET /auth/token` endpoint can mint a signed JWT from the
   active session, for callers other than this API that need to verify identity independently. Purely
   additive — the native cookie session works identically whether or not this is selected.
@@ -98,8 +107,11 @@ folder it lives in (`recipes/<category>/<id>/`).
 - Everything else (e.g. `ui`, `ai-format`) is a **category recipe** — independent of other
   categories, freely mixable, selected zero-or-more at a time.
 
-Declare `conflicts`/`requires` (other recipe ids) in the manifest to constrain valid combinations;
-the engine's resolver (`src/engine/resolve.ts`) enforces these before generation runs.
+Declare `conflicts`/`requires`/`requiresAnyOf` (other recipe ids) in the manifest to constrain valid
+combinations; the engine's resolver (`src/engine/resolve.ts`) enforces these before generation
+runs. `requires` is AND (every listed id must be selected); `requiresAnyOf` is OR (at least one
+must be) — added for `jwt-plugin`, which needs *some* better-auth-based bundle but shouldn't
+hardcode which one, now that a second one (`drizzle-betterauth-casl-stripe`) exists.
 
 ## Gotchas hit while building `prisma-betterauth-casl-stripe` (worth knowing before extending it)
 
@@ -585,6 +597,88 @@ config-format-specific set of gotchas in the whole bundle so far.
   `node_modules/.pnpm` → Docker Postgres → full migration sequence → `pnpm test` (7 unit tests) →
   `nest build` (zero errors) → `pnpm test:e2e` (4 e2e tests, real HTTP, real Postgres) → `tsc -b` +
   `vite build` in `app/` (both clean).
+
+## Gotchas hit while building `drizzle-betterauth-casl-stripe`
+
+- **There's no Prisma-Client-Extension equivalent in Drizzle** — the core design question for this
+  whole bundle. Prisma's `forTenant()`/`forUser()` hook into `$extends`'s per-query middleware so
+  `TenantContext.getPrisma()` can return an already-scoped client callers query directly
+  (`prisma.project.findMany()`). Drizzle has no per-query middleware hook at all, so
+  `tenant.extension.ts`'s `withTenant()`/`withUser()` are plain higher-order functions instead: they
+  open a real transaction, run `SELECT set_config(key, value, true)`, then invoke a caller-supplied
+  callback with the transaction handle. `TenantContext.withTenant(fn)` replaces `getPrisma()`
+  everywhere — same "can't forget to scope by tenant" guarantee, just a callback instead of a
+  wrapped client object. See `ARCHITECTURE.md`'s own "Drizzle vs Prisma" section (ships in every
+  generated project) for the diagram-level version of this.
+- **`better-auth/adapters/drizzle` is a thin re-export of a separate `@better-auth/drizzle-adapter`
+  package, not bundled code** — confirmed by installing `better-auth@1.7.2` into a scratch dir and
+  reading its actual `dist/adapters/drizzle-adapter/index.d.mts` (`export * from
+  "@better-auth/drizzle-adapter"`), not by trusting the docs site's code samples at face value (one
+  doc page even showed a different, incompatible import path). `@better-auth/drizzle-adapter` is
+  pinned as a direct `api/` dependency for the same pnpm-strict-node_modules reason `zod` already
+  is elsewhere in this bundle — it's a real dependency of `better-auth`, but `auth.ts`'s own
+  inferred types need it resolvable directly.
+- **The generated `auth-schema.ts` needs a placeholder to exist before its first real generation** —
+  `auth.ts` imports it (for `drizzleAdapter`'s `schema` option) at module load time, but
+  `npx auth generate` itself needs to *import* `auth.ts` to read the resolved config, which would
+  fail on a file that doesn't exist yet. Exactly the same chicken-and-egg problem the Prisma bundle
+  solves with an initial near-empty `prisma generate` pass — solved here by shipping
+  `api/src/db/auth-schema.ts` as a static one-line placeholder (`export {}`) that `postInstall.ts`'s
+  `npx auth generate --yes --output src/db/auth-schema.ts` then overwrites with the real tables.
+- **`camelCase: true` is required on the adapter config, or the generated auth tables use
+  snake_case** while every hand-written table in `schema.ts` uses camelCase (`"tenantId"`, matching
+  the Prisma bundle's column-naming convention) — without it, `npx auth generate` would produce a
+  genuinely different naming convention for `user`/`session`/`account`/`verification` than
+  everything else in the schema.
+- **`@paralleldrive/cuid2` (tried first, for id-shape parity with the Prisma bundle's `cuid()`
+  defaults) ships ESM-only, and Jest's CJS test runner can't load it even transitively** — any unit
+  test importing `schema.ts` (which every unit test does, transitively through `TenantContext`)
+  failed with "Must use import to load ES Module", the exact same class of bug already documented
+  for `@thallesp/nestjs-better-auth` elsewhere in this bundle. Rather than add a second
+  `jestModuleNameMapper` workaround, dropped the dependency entirely: every id column uses
+  Postgres's own `gen_random_uuid()` default (`uuid` column type) instead of a JS-generated id.
+  Caught by actually running `pnpm test` inside a real generated project — the generator's own
+  `tsc --noEmit` never touches recipe `files/` content (see `tsconfig.json`'s `exclude`), so this
+  kind of bug is invisible to any check *inside this repo*.
+- **Casting `current_setting(...)::uuid` in an RLS policy is wrong, and fails intermittently on a
+  pooled connection, not consistently** — the real bug that took the longest to isolate. `tenantId`
+  columns are `uuid`, but `current_setting()` always returns `text`, so *some* cast is needed for
+  the comparison. Casting the setting to `uuid` seems like the obvious fix and even works for the
+  first couple of requests in a fresh process — until a `pg.Pool` connection that has previously had
+  `SET LOCAL app.current_tenant_id = <value>` committed on it gets reused for a transaction that
+  never sets that variable at all (exactly what `withUser()`'s own query does, since it only sets
+  `app.current_user_id`): Postgres reverts a custom GUC that's never had a *non-transactional* value
+  to `''` (empty string), not `NULL`, once a `SET LOCAL` on it has ever committed on that session —
+  and `''::uuid` raises `invalid input syntax for type uuid`, a hard 500. This reproduced reliably
+  once discovered but looked like intermittent flakiness at first (works for request 1 and 2, fails
+  from request 3 onward) — isolated by writing a standalone script that called `withUser`/`withTenant`
+  directly against the real Postgres container outside NestJS entirely, confirming the SQL/data
+  layer was fine in isolation, then adding a temporary `try/catch` around the real
+  `TenantContext.doResolve()` query to print `err.cause` (drizzle's own wrapper error hides the
+  underlying `pg` error's message; `AllExceptionsFilter` only logs `.stack`, which doesn't include a
+  `.cause` chain). Fixed by casting the *column* to text instead
+  (`"tenantId"::text = current_setting('app.current_tenant_id', true)`) — comparing against `''` now
+  just fails the equality check normally (filtered out, fail-closed) instead of throwing.
+- **Drizzle-kit's own migration journal (`drizzle/meta/_journal.json`) isn't a place to hand-author
+  a new "migration"** — unlike Prisma's migration folders (plain timestamped directories on disk,
+  trivial to fabricate one for the RLS DDL), drizzle-kit's journal format is undocumented and
+  version-sensitive. `enable-rls.sql` is applied directly (`postInstall.ts`, via `docker compose
+  exec ... psql ... -c <sql>`) against `DATABASE_URL` as the superuser, immediately after
+  `drizzle-kit migrate` — not folded into the tracked migration history the way the Prisma bundle's
+  RLS migration is. It's still idempotent (`IF NOT EXISTS`/`DO` guards throughout), so re-running
+  postInstall's steps against an already-migrated database is safe.
+- **`npx auth generate --yes --output src/db/auth-schema.ts` and `npx drizzle-kit generate` /
+  `npx drizzle-kit migrate` all worked without needing `--adapter`/`--dialect` flags** — the CLI
+  correctly infers everything from importing `auth.ts`'s resolved config, exactly like the Prisma
+  bundle's `npx auth generate --yes` needs no `--adapter prisma` flag either. The docs mention these
+  flags as needed "without a database connection" — irrelevant here, since `auth.ts` always
+  constructs a real (if not-yet-connected) `Pool`.
+- **Verified via a complete clean-room pass**, same rigor as the Prisma bundle: fresh `generate()` →
+  clean `pnpm install` → Docker Postgres → `npx auth generate` → `drizzle-kit generate` +
+  `drizzle-kit migrate` → `enable-rls.sql` applied → `pnpm test` (7 unit tests) → `nest build` (zero
+  errors) → `pnpm test:e2e` (4 e2e tests: signup → CRUD → cross-tenant isolation → RBAC, real HTTP,
+  real Postgres) → `tsc -b` + `vite build` in `app/` (both clean, since `app/` has zero ORM
+  dependency and is reused byte-for-byte from the Prisma bundle).
 
 ## Injecting into a file
 

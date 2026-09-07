@@ -344,4 +344,124 @@ describe('real base template', () => {
     );
     expect(copilotInstructions).toContain('[`AGENTS.md`](../AGENTS.md)');
   });
+
+  it('generates a well-formed project with the real Drizzle bundle + jwt-plugin selected', async () => {
+    const outputDir = await freshOutputDir();
+
+    const result = await generate({
+      baseTemplateDir,
+      recipesDir,
+      outputDir,
+      projectName: 'Drizzle Smoke App',
+      selection: {
+        bundle: 'drizzle-betterauth-casl-stripe',
+        categories: ['jwt-plugin'],
+      },
+      runPostInstall: false, // postInstall needs Docker + installed deps; covered by manual e2e verification
+    });
+
+    expect(result.appliedRecipes.map((r) => r.manifest.id)).toEqual([
+      'drizzle-betterauth-casl-stripe',
+      'jwt-plugin',
+    ]);
+
+    for (const relPath of [
+      'docker-compose.yml',
+      'api/drizzle.config.ts',
+      'api/src/db/schema.ts',
+      'api/src/db/auth-schema.ts',
+      'api/src/db/enable-rls.sql',
+      'api/src/db/db.service.ts',
+      'api/src/db/db.module.ts',
+      'api/src/auth/auth.ts',
+      'api/src/auth/current-user.decorator.ts',
+      'api/src/tenancy/tenant.extension.ts',
+      'api/src/tenancy/tenant-context.ts',
+      'api/src/tenancy/tenancy.module.ts',
+      'api/src/tenancy/tenants.controller.ts',
+      'api/src/casl/policies.decorator.ts',
+      'api/src/casl/policies.guard.ts',
+      'api/src/casl/casl.module.ts',
+      'api/src/billing/billing.module.ts',
+      'api/src/billing/billing.controller.ts',
+      'api/src/billing/billing.service.ts',
+      'api/src/billing/active-subscription.guard.ts',
+      'api/src/billing/requires-active-subscription.decorator.ts',
+      'api/src/billing/dto/create-checkout-session.dto.ts',
+      'api/src/projects/projects.module.ts',
+      'api/src/projects/projects.controller.ts',
+      'api/src/projects/projects.service.ts',
+      'api/src/projects/dto/create-project.dto.ts',
+      'api/src/projects/dto/update-project.dto.ts',
+      'api/src/projects/dto/project-response.dto.ts',
+      'api/src/projects/projects.service.spec.ts',
+      'api/test/golden-path.e2e-spec.ts',
+      'api/test/__mocks__/thallesp-nestjs-better-auth.ts',
+      'docs/adding-a-resource.md',
+      'ARCHITECTURE.md',
+      'pnpm-workspace.yaml',
+      'packages/shared/package.json',
+      'app/src/lib/auth-client.ts',
+      'app/src/lib/use-ability.ts',
+      'app/src/features/auth/LoginPage.tsx',
+      'app/src/features/projects/ProjectsListPage.tsx',
+    ]) {
+      await expect(fs.stat(path.join(outputDir, relPath))).resolves.toBeDefined();
+    }
+
+    const moduleTs = await fs.readFile(path.join(outputDir, 'api', 'src', 'app.module.ts'), 'utf8');
+    expect(moduleTs).toContain("import { AuthModule } from '@thallesp/nestjs-better-auth';");
+    expect(moduleTs).toContain('DbModule,');
+    expect(moduleTs).toContain('TenancyModule,');
+    expect(moduleTs).not.toContain('PrismaModule');
+    expect(moduleTs).not.toContain('@inikitty:inject:');
+
+    const schemaTs = await fs.readFile(path.join(outputDir, 'api', 'src', 'db', 'schema.ts'), 'utf8');
+    expect(schemaTs).toContain('export const tenant');
+    expect(schemaTs).toContain('export const membership');
+    expect(schemaTs).toContain('export const subscription');
+    expect(schemaTs).toContain('export const project');
+    // Real bug caught via live generation + e2e testing: cuid2 is ESM-only and breaks Jest even
+    // transitively; gen_random_uuid() was the fix (see enable-rls.sql's cast comment too).
+    expect(schemaTs).not.toContain("from '@paralleldrive/cuid2'");
+    expect(schemaTs).toContain('gen_random_uuid()');
+
+    const enableRlsSql = await fs.readFile(path.join(outputDir, 'api', 'src', 'db', 'enable-rls.sql'), 'utf8');
+    expect(enableRlsSql).toContain('ALTER TABLE "subscription" ENABLE ROW LEVEL SECURITY;');
+    expect(enableRlsSql).toContain('ALTER TABLE "project" ENABLE ROW LEVEL SECURITY;');
+    // Real bug caught via live e2e testing: casting current_setting(...)::uuid throws on a reused
+    // pooled connection once the GUC has reverted to '' — casting the column to text instead is
+    // the fix, and must not regress back to the broken form.
+    expect(enableRlsSql).toContain('"tenantId"::text = current_setting(');
+    expect(enableRlsSql).not.toContain("current_setting('app.current_tenant_id', true)::uuid");
+
+    const authTs = await fs.readFile(path.join(outputDir, 'api', 'src', 'auth', 'auth.ts'), 'utf8');
+    expect(authTs).toContain("import { drizzleAdapter } from 'better-auth/adapters/drizzle';");
+    expect(authTs).toContain("import { bearer, jwt } from 'better-auth/plugins';");
+    expect(authTs).toContain('jwt(),');
+    expect(authTs).toContain('bearer(),');
+    expect(authTs).not.toContain('@inikitty:inject:');
+
+    const apiPkg = JSON.parse(await fs.readFile(path.join(outputDir, 'api', 'package.json'), 'utf8'));
+    expect(apiPkg.dependencies['drizzle-orm']).toBeDefined();
+    expect(apiPkg.dependencies.pg).toBeDefined();
+    expect(apiPkg.dependencies['@better-auth/drizzle-adapter']).toBeDefined();
+    expect(apiPkg.devDependencies['drizzle-kit']).toBeDefined();
+    expect(apiPkg.dependencies['better-auth']).toBeDefined();
+    expect(apiPkg.dependencies['drizzle-smoke-app-shared']).toBe('workspace:*');
+    expect(apiPkg.jest.moduleNameMapper['^@thallesp/nestjs-better-auth$']).toBe(
+      '<rootDir>/test/__mocks__/thallesp-nestjs-better-auth.ts',
+    );
+
+    const agentsMd = await fs.readFile(path.join(outputDir, 'AGENTS.md'), 'utf8');
+    expect(agentsMd).toContain('Drizzle Smoke App');
+    expect(agentsMd).toContain('TenantContext.withTenant(fn)');
+    expect(agentsMd).toContain('JWT plugin');
+    expect(agentsMd).not.toContain('@inikitty:inject:');
+
+    const readmeMd = await fs.readFile(path.join(outputDir, 'README.md'), 'utf8');
+    expect(readmeMd).toContain('npx drizzle-kit generate');
+    expect(readmeMd).toContain('npx drizzle-kit migrate');
+    expect(readmeMd).not.toContain('@inikitty:inject:');
+  });
 });

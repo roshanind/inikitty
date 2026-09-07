@@ -17,9 +17,12 @@ describe('discoverRecipes', () => {
     const ids = result.map((r) => r.manifest.id).sort();
     expect(ids).toEqual([
       'alpha',
+      'beta',
       'collides-with-alpha',
       'conflicting',
+      'gamma',
       'needs-alpha',
+      'needs-alpha-or-beta',
       'needs-widgets',
       'widgets',
     ]);

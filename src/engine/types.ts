@@ -27,6 +27,11 @@ export interface RecipeManifest {
   description?: string;
   conflicts?: string[];
   requires?: string[];
+  /** Satisfied if *any* one of these ids is selected — unlike `requires` (every id must be
+   * selected). For a category recipe that works identically against more than one bundle (e.g.
+   * jwt-plugin's auth.ts markers exist in every better-auth-based bundle), this avoids hardcoding
+   * a single bundle id as a prerequisite when the real requirement is "one of these." */
+  requiresAnyOf?: string[];
   packageJsonPatch?: {
     api?: PackageJsonPatchFragment;
     app?: PackageJsonPatchFragment;

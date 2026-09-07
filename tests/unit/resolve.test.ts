@@ -56,4 +56,20 @@ describe('resolveRecipes', () => {
       resolveRecipes(discovered, { bundle: 'alpha', categories: ['widgets', 'conflicting'] }),
     ).toThrow(/conflicts/i);
   });
+
+  it('accepts a requiresAnyOf relationship satisfied by whichever bundle is selected', () => {
+    expect(() =>
+      resolveRecipes(discovered, { bundle: 'alpha', categories: ['needs-alpha-or-beta'] }),
+    ).not.toThrow();
+
+    expect(() =>
+      resolveRecipes(discovered, { bundle: 'beta', categories: ['needs-alpha-or-beta'] }),
+    ).not.toThrow();
+  });
+
+  it('rejects a requiresAnyOf relationship satisfied by neither alternative', () => {
+    expect(() =>
+      resolveRecipes(discovered, { bundle: 'gamma', categories: ['needs-alpha-or-beta'] }),
+    ).toThrow(/requires one of/i);
+  });
 });

@@ -1,0 +1,6 @@
+DbModule,
+AuthModule.forRoot({ auth }),
+TenancyModule,
+CaslModule,
+BillingModule,
+ProjectsModule,
