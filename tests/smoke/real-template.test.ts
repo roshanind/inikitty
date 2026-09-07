@@ -117,7 +117,7 @@ describe('real base template', () => {
     expect(appTsx).toContain("const projectName = 'Smoke Test App';");
   });
 
-  it('generates a well-formed project with the real golden-path bundle + jwt-plugin + claude-code selected', async () => {
+  it('generates a well-formed project with the real golden-path bundle + jwt-plugin + all ai-format shims selected', async () => {
     const outputDir = await freshOutputDir();
 
     const result = await generate({
@@ -125,14 +125,20 @@ describe('real base template', () => {
       recipesDir,
       outputDir,
       projectName: 'Auth Smoke App',
-      selection: { bundle: 'prisma-betterauth-casl-stripe', categories: ['jwt-plugin', 'claude-code'] },
+      selection: {
+        bundle: 'prisma-betterauth-casl-stripe',
+        categories: ['jwt-plugin', 'claude-code', 'cursor', 'copilot'],
+      },
       runPostInstall: false, // postInstall needs Docker + installed deps; covered by manual e2e verification
     });
 
-    // Bundle-first, then alphabetical by category-then-id: 'ai-format' sorts before 'auth-extra'.
+    // Bundle-first, then alphabetical by category-then-id: 'ai-format' (claude-code, copilot,
+    // cursor, alphabetically) sorts before 'auth-extra' (jwt-plugin).
     expect(result.appliedRecipes.map((r) => r.manifest.id)).toEqual([
       'prisma-betterauth-casl-stripe',
       'claude-code',
+      'copilot',
+      'cursor',
       'jwt-plugin',
     ]);
 
@@ -169,6 +175,8 @@ describe('real base template', () => {
       'docs/adding-a-resource.md',
       'ARCHITECTURE.md',
       'CLAUDE.md',
+      '.cursor/rules/agents.mdc',
+      '.github/copilot-instructions.md',
       'pnpm-workspace.yaml',
       'packages/shared/package.json',
       'packages/shared/tsconfig.json',
@@ -326,5 +334,14 @@ describe('real base template', () => {
 
     const claudeMd = await fs.readFile(path.join(outputDir, 'CLAUDE.md'), 'utf8');
     expect(claudeMd).toContain('[`AGENTS.md`](./AGENTS.md)');
+
+    const cursorRules = await fs.readFile(path.join(outputDir, '.cursor', 'rules', 'agents.mdc'), 'utf8');
+    expect(cursorRules).toContain('@AGENTS.md');
+
+    const copilotInstructions = await fs.readFile(
+      path.join(outputDir, '.github', 'copilot-instructions.md'),
+      'utf8',
+    );
+    expect(copilotInstructions).toContain('[`AGENTS.md`](../AGENTS.md)');
   });
 });

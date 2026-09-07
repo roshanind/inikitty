@@ -1,0 +1,8 @@
+---
+description: Points Cursor at this repository's real source of truth
+alwaysApply: true
+---
+
+This project's conventions, commands, and guardrails live in @AGENTS.md — always read it before
+making changes. Don't duplicate its content in this file; if something needs to change, change it
+in `AGENTS.md`, not here.

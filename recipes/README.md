@@ -61,6 +61,15 @@
   the category mechanism end-to-end. No real content lives in `CLAUDE.md` itself, by design (see
   `docs/product-scope.md` §11's own warning against a shim duplicating — and drifting from — the
   real source of truth).
+- **`ai-format/cursor`** — same pattern, same rationale, one recipe later: generates
+  `.cursor/rules/agents.mdc` (frontmatter `alwaysApply: true` so it's always in context, not
+  glob-scoped to specific files). Uses Cursor's `@AGENTS.md` file-reference syntax in the rule
+  body rather than a plain Markdown link — Cursor resolves that reference and actually pulls
+  `AGENTS.md`'s content into context, not just a clickable pointer a human would need to follow.
+- **`ai-format/copilot`** — same pattern: generates `.github/copilot-instructions.md`, which
+  GitHub Copilot Chat automatically includes in every request made in the repository. Points at
+  `../AGENTS.md` (one level up from `.github/`, not `./AGENTS.md` like the project-root shims —
+  the relative path differs because this file itself lives one directory deeper).
 
 The generator engine (`src/engine/`) is built against the contract below and is unit-tested against
 small fixture recipes in `tests/fixtures/recipes/` (kept deliberately separate from the recipes
