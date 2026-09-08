@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process';
+import { copyFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as p from '@clack/prompts';
@@ -102,6 +103,16 @@ async function main() {
     spinner.stop('Generation failed.');
     p.log.error(err instanceof Error ? err.message : String(err));
     process.exit(1);
+  }
+
+  // A bundle's envVars land in .env.example only (see mergeEnvVars) — copy its working local-dev
+  // defaults into api/.env now, before postInstall runs below, so `dotenv/config` (in auth.ts,
+  // prisma.config.ts/drizzle.config.ts, etc.) can actually find DATABASE_URL and friends. Without
+  // this, every postInstall step silently fails with a "Cannot resolve environment variable" error
+  // and the run falls back to printing manual steps — a real bug this exact line fixes.
+  const envExample = path.join(outputDir, '.env.example');
+  if (await pathExists(envExample)) {
+    await copyFile(envExample, path.join(outputDir, 'api', '.env'));
   }
 
   // A recipe (e.g. the golden-path bundle, for its packages/shared) may have written a root
