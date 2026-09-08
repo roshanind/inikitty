@@ -9,6 +9,10 @@ export const manifest: RecipeManifest = {
     'via Postgres RLS, CASL RBAC enforcement, Stripe billing, the Projects example resource) ' +
     'reimplemented against Drizzle instead of Prisma — see recipes/README.md for where the two ' +
     "bundles' designs genuinely diverge (there's no Prisma-Client-Extension equivalent in Drizzle).",
+  // Everything ORM-agnostic (CASL guard, billing controller, Projects DTOs/controller, the FE
+  // pages, packages/shared, docker-compose.yml, etc.) lives once in _shared/betterauth-casl-stripe
+  // and is shared with the Prisma bundle — see that directory's own comment for why.
+  sharedDirs: ['_shared/betterauth-casl-stripe'],
   packageJsonPatch: {
     api: {
       dependencies: {

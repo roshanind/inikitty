@@ -32,6 +32,14 @@ export interface RecipeManifest {
    * jwt-plugin's auth.ts markers exist in every better-auth-based bundle), this avoids hardcoding
    * a single bundle id as a prerequisite when the real requirement is "one of these." */
   requiresAnyOf?: string[];
+  /** Paths, relative to `recipesDir`, of shared fragment directories to copy/inject before this
+   * recipe's own files/inject. Each entry is structured exactly like a recipe root (an optional
+   * `files/` and/or `inject/` subtree) but lives outside the `<category>/<id>/` layout so
+   * `discoverRecipes` never treats it as a recipe in its own right. This exists for content that
+   * is byte-for-byte identical across recipes for a real reason (e.g. two bundles that only differ
+   * in ORM but share every ORM-agnostic controller/DTO/FE file) — it lets that content live in one
+   * place instead of being hand-copied into every recipe that needs it. */
+  sharedDirs?: string[];
   packageJsonPatch?: {
     api?: PackageJsonPatchFragment;
     app?: PackageJsonPatchFragment;
@@ -39,12 +47,20 @@ export interface RecipeManifest {
   envVars?: EnvVarSpec[];
 }
 
-/** A manifest plus the on-disk locations of its files/, inject/, and postInstall.ts. */
+/** One resolved `sharedDirs` entry: the on-disk locations of its files/ and inject/ subtrees. */
+export interface SharedDir {
+  filesDir: string;
+  injectDir: string;
+}
+
+/** A manifest plus the on-disk locations of its files/, inject/, postInstall.ts, and any
+ * `sharedDirs` it declares. */
 export interface DiscoveredRecipe {
   manifest: RecipeManifest;
   dir: string;
   filesDir: string;
   injectDir: string;
+  sharedDirs: SharedDir[];
   postInstallPath: string | undefined;
 }
 

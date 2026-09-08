@@ -60,11 +60,27 @@ export async function discoverRecipes(recipesDir: string): Promise<DiscoveredRec
       }
 
       const postInstallPath = path.join(recipeDir, 'postInstall.ts');
+      const sharedDirs: DiscoveredRecipe['sharedDirs'] = [];
+      for (const rel of manifest.sharedDirs ?? []) {
+        const sharedDir = path.join(recipesDir, rel);
+        if (!(await pathExists(sharedDir))) {
+          throw new Error(
+            `Recipe "${recipeDir}" declares sharedDirs entry "${rel}", which does not exist ` +
+              `under "${recipesDir}".`,
+          );
+        }
+        sharedDirs.push({
+          filesDir: path.join(sharedDir, 'files'),
+          injectDir: path.join(sharedDir, 'inject'),
+        });
+      }
+
       discovered.push({
         manifest,
         dir: recipeDir,
         filesDir: path.join(recipeDir, 'files'),
         injectDir: path.join(recipeDir, 'inject'),
+        sharedDirs,
         postInstallPath: (await pathExists(postInstallPath)) ? postInstallPath : undefined,
       });
     }

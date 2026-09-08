@@ -44,11 +44,23 @@ describe('generate (full pipeline)', () => {
       fs.readFile(path.join(outputDir, 'app', 'src', 'widgets.txt'), 'utf8'),
     ).resolves.toContain('widgets file');
 
+    // files/ copied from alpha's sharedDirs entry too, alongside its own files
+    await expect(
+      fs.readFile(path.join(outputDir, 'api', 'src', 'shared.txt'), 'utf8'),
+    ).resolves.toContain('shared file content');
+
     // injection applied and markers stripped
     const moduleContent = await fs.readFile(path.join(outputDir, 'api', 'src', 'app.module.ts'), 'utf8');
     expect(moduleContent).toContain("import { AlphaModule } from './alpha.module';");
     expect(moduleContent).toContain('AlphaProvider,');
     expect(moduleContent).not.toContain('@inikitty:inject:');
+
+    // sharedDirs inject applied before the recipe's own inject, both above the marker
+    expect(moduleContent).toContain("import { SharedThing } from './shared.thing';");
+    const sharedImportIndex = moduleContent.indexOf("import { SharedThing }");
+    const ownImportIndex = moduleContent.indexOf("import { AlphaModule }");
+    expect(sharedImportIndex).toBeGreaterThan(-1);
+    expect(sharedImportIndex).toBeLessThan(ownImportIndex);
 
     // packageJsonPatch merged and {{projectNameKebab}} substituted
     const apiPkg = JSON.parse(await fs.readFile(path.join(outputDir, 'api', 'package.json'), 'utf8'));

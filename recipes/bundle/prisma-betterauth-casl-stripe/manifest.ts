@@ -9,6 +9,11 @@ export const manifest: RecipeManifest = {
     'Stripe billing (Checkout, Customer Portal, webhook-driven Subscription sync), and the ' +
     'Projects example resource (tenant-scoped, RBAC-guarded CRUD with MUI-based FE ' +
     'list/create/detail pages) end to end.',
+  // Everything here that never mentions Prisma/Drizzle (CASL guard, billing controller, Projects
+  // DTOs/controller, the FE pages, packages/shared, docker-compose.yml, etc.) lives once in
+  // _shared/betterauth-casl-stripe and is shared with the Drizzle bundle, rather than being
+  // hand-copied — see that directory's own comment for why.
+  sharedDirs: ['_shared/betterauth-casl-stripe'],
   packageJsonPatch: {
     api: {
       dependencies: {

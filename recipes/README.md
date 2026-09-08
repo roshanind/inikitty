@@ -54,10 +54,13 @@
 - **`bundle/drizzle-betterauth-casl-stripe`** — a second golden-path bundle, implementing the
   identical guarantees as the Prisma bundle above (same RLS policies, same CASL rules, same
   DTO/RBAC/testing conventions, same `Projects` worked example) against Drizzle instead of Prisma.
-  `packages/shared` (CASL rules) and every FE file are reused byte-for-byte from the Prisma bundle —
-  neither has any ORM dependency. The two bundles are mutually exclusive (the engine only ever
-  allows one `bundle`-category recipe selected at a time); pick this one for Drizzle, the other for
-  Prisma. See the Drizzle gotchas below for where its design genuinely diverges (there's no
+  `packages/shared` (CASL rules), every FE file, and every ORM-agnostic `api/` file (CASL guard,
+  billing controller, Projects DTOs/controller, etc. — none has any ORM dependency) live once in
+  [`_shared/betterauth-casl-stripe`](_shared/betterauth-casl-stripe/README.md) and are declared via
+  `sharedDirs` in both bundles' `manifest.ts` rather than hand-copied into each — see "Sharing files
+  between recipes" below. The two bundles are mutually exclusive (the engine only ever allows one
+  `bundle`-category recipe selected at a time); pick this one for Drizzle, the other for Prisma. See
+  the Drizzle gotchas below for where its design genuinely diverges (there's no
   Prisma-Client-Extension equivalent in Drizzle) and two real, live-verification-caught bugs.
 - **`auth-extra/jwt-plugin`** — optional, off by default, `requiresAnyOf` either bundle above (its
   `auth.ts` markers exist identically in both — nothing about it is ORM-specific). Adds Better
@@ -98,6 +101,25 @@ recipes/<category>/<id>/
 
 `manifest.ts` must export a `manifest` (named or default) whose `id` and `category` match the
 folder it lives in (`recipes/<category>/<id>/`).
+
+## Sharing files between recipes
+
+If two-or-more recipes need the exact same file for a real reason (not just coincidentally similar
+— see `_shared/betterauth-casl-stripe/README.md` for the bar), don't hand-copy it into each recipe's
+own `files/`/`inject/`. Instead:
+
+1. Put the shared `files/`/`inject/` tree under `recipes/_shared/<name>/` — same internal layout as
+   a recipe root, but with no `manifest.ts`, so `discoverRecipes()` never treats it as a recipe (it
+   only registers `<category>/<id>/` folders that have one).
+2. List it in each recipe's manifest: `sharedDirs: ['_shared/<name>']` (paths are relative to
+   `recipesDir`).
+
+At generate time, each recipe's `sharedDirs` entries are copied/injected *before* its own
+`files/`/`inject/` (so a recipe's own content always lands last, closest to the marker). This needed
+no changes to `resolve.ts` or `discover.ts`'s recipe-scanning logic — `sharedDirs` is resolved
+per-recipe in `discover.ts` and consumed in `apply.ts` the same way `filesDir`/`injectDir` already
+are. Only add a file here if it's genuinely identical everywhere it's used; if one consumer ever
+needs a variant, move that file back into its own recipe instead of parameterizing the shared copy.
 
 ## Recipe kinds
 

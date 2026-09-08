@@ -30,14 +30,26 @@ describe('discoverRecipes', () => {
     const alpha = result.find((r) => r.manifest.id === 'alpha');
     expect(alpha?.manifest.category).toBe('bundle');
     expect(alpha?.postInstallPath).toBeDefined();
+    expect(alpha?.sharedDirs).toEqual([
+      {
+        filesDir: path.join(recipesDir, '_shared', 'common', 'files'),
+        injectDir: path.join(recipesDir, '_shared', 'common', 'inject'),
+      },
+    ]);
 
     const widgets = result.find((r) => r.manifest.id === 'widgets');
     expect(widgets?.postInstallPath).toBeUndefined();
+    expect(widgets?.sharedDirs).toEqual([]);
   });
 
   it('throws when a manifest id does not match its folder name', async () => {
     // reuse the real recipes dir structure but point discovery at a mismatched fixture
     const mismatchDir = path.join(fixturesDir, 'mismatched-recipes');
     await expect(discoverRecipes(mismatchDir)).rejects.toThrow();
+  });
+
+  it('throws when a manifest declares a sharedDirs entry that does not exist', async () => {
+    const dir = path.join(fixturesDir, 'missing-shared-dir');
+    await expect(discoverRecipes(dir)).rejects.toThrow(/sharedDirs entry/);
   });
 });

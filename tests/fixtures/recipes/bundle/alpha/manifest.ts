@@ -4,6 +4,7 @@ export const manifest: RecipeManifest = {
   id: 'alpha',
   category: 'bundle',
   description: 'Fixture bundle recipe used by engine unit tests.',
+  sharedDirs: ['_shared/common'],
   packageJsonPatch: {
     api: {
       dependencies: { 'alpha-lib': '^1.0.0' },

@@ -70,6 +70,19 @@ export async function generate(options: GenerateOptions): Promise<GenerateResult
   await copyTree(baseTemplateDir, options.outputDir, { overwrite: false });
 
   for (const recipe of resolved) {
+    for (const shared of recipe.sharedDirs) {
+      if (await pathExists(shared.filesDir)) {
+        await copyTree(shared.filesDir, options.outputDir, {
+          overwrite: false,
+          onCollision: (relPath) => {
+            throw new Error(
+              `Recipe "${recipe.manifest.id}"'s shared files (via sharedDirs) tried to write ` +
+                `"${relPath}", which was already written by the base template or an earlier recipe.`,
+            );
+          },
+        });
+      }
+    }
     if (await pathExists(recipe.filesDir)) {
       await copyTree(recipe.filesDir, options.outputDir, {
         overwrite: false,
@@ -84,6 +97,9 @@ export async function generate(options: GenerateOptions): Promise<GenerateResult
   }
 
   for (const recipe of resolved) {
+    for (const shared of recipe.sharedDirs) {
+      await applyInjections({ ...recipe, injectDir: shared.injectDir }, options.outputDir);
+    }
     await applyInjections(recipe, options.outputDir);
   }
   await mergeEnvVars(resolved, options.outputDir);
