@@ -27,7 +27,12 @@
     "docs:preview": "pnpm --dir docs-site preview",
     "ci:list-bundles": "tsx scripts/list-bundles.ts",
     "ci:golden-path:generate": "tsx scripts/golden-path-generate.ts",
-    "ci:golden-path:post-install": "tsx scripts/golden-path-post-install.ts"
+    "ci:golden-path:post-install": "tsx scripts/golden-path-post-install.ts",
+    "new-recipe": "tsx scripts/new-recipe.ts",
+    "check-recipes": "tsx scripts/check-recipes.ts",
+    "check-recipe-duplication": "tsx scripts/check-recipe-duplication.ts",
+    "dry-run": "tsx scripts/dry-run.ts",
+    "list-markers": "tsx scripts/list-markers.ts"
   },
   "dependencies": {
     "@clack/prompts": "^0.9.1",
