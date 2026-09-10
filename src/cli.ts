@@ -53,7 +53,7 @@ async function main() {
       message: 'Pick a golden-path bundle',
       options: bundles.map((r) => ({
         value: r.manifest.id,
-        label: r.manifest.id,
+        label: r.manifest.label ?? r.manifest.id,
         hint: r.manifest.description,
       })),
     });
@@ -72,7 +72,7 @@ async function main() {
       message: 'Additional options',
       options: categoryRecipes.map((r) => ({
         value: r.manifest.id,
-        label: r.manifest.id,
+        label: r.manifest.label ?? r.manifest.id,
         hint: r.manifest.description,
       })),
       required: false,

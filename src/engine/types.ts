@@ -24,6 +24,11 @@ export interface EnvVarSpec {
 export interface RecipeManifest {
   id: string;
   category: string;
+  /** Short, human-friendly name shown in the CLI's selection prompt in place of `id` — `id` is
+   * the technical identifier (folder name, `--bundle` value, `conflicts`/`requires` target) and
+   * stays stable even if this changes; falls back to `id` when omitted. Keep this a name, not a
+   * summary — `description` is what the prompt shows alongside it as the longer hint. */
+  label?: string;
   description?: string;
   conflicts?: string[];
   requires?: string[];
