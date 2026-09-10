@@ -27,6 +27,10 @@ export default withMermaid({
         items: [{ text: 'Wiring up authentication', link: '/auth-recipe' }],
       },
       {
+        text: 'Contributing',
+        items: [{ text: 'Authoring a recipe', link: '/authoring-a-recipe' }],
+      },
+      {
         text: 'Reference',
         items: [
           { text: 'Lessons learned', link: '/lessons' },

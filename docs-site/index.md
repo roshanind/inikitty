@@ -60,6 +60,8 @@ one output directory; everything after that is normal tooling — install, then 
 - **[A full CLI run](/cli-flow)** — from `create-inikitty` to a running app, end to end
 - **[Case study: wiring up authentication](/auth-recipe)** — what the auth bundle's `postInstall.ts`
   actually does, verified live against a real Postgres
+- **[Authoring a recipe](/authoring-a-recipe)** — for contributors: the manifest field reference,
+  when to reach for a shared fragment, and a worked example (adding a Java service) end to end
 - **[Lessons learned](/lessons)** — five real bugs found only by actually running the generated
   project, not by reading the code
 - **[Module map](/reference)** — a quick-reference table of every file under `src/engine/`

@@ -28,6 +28,10 @@ combinations — the resolver enforces this before any file is written.
 | `bundle/prisma-betterauth-casl-stripe` | bundle | Functionally complete: Postgres via Docker Compose + Prisma with a driver adapter, Better Auth wired into NestJS (email+password with verification, a global auth guard), multi-tenancy with Postgres row-level security, CASL RBAC (`PoliciesGuard` + `@CheckPolicies()`, isomorphic rules shared with the frontend via a pnpm workspace package), Stripe billing (Checkout, Customer Portal, webhook-driven subscription sync), and a `Projects` example resource (tenant-scoped, RBAC-guarded CRUD with frontend pages) demonstrating the pattern for real resources. |
 | `auth-extra/jwt-plugin` | category | Adds a `GET /auth/token` endpoint that mints a signed JWT from the active session. Purely additive — `requires` the bundle above, changes nothing about how login/session already works. |
 
+Adding a new one? See [Authoring a recipe](/authoring-a-recipe) for the contributor-facing
+walkthrough, including a worked example of adding a recipe for a technology (Java) that isn't part
+of the fixed NestJS/React base template.
+
 ## Why bundles don't split further
 
 A second ORM means authoring a second bundle (`drizzle-betterauth-casl-stripe`), not making ORM
