@@ -153,6 +153,35 @@ recipes/<category>/<id>/
 
 **CI implication:** the existing golden-path CI check (8.3) should be written to run once per available bundle, so it automatically covers new bundles as they're added rather than needing a rewrite.
 
+### 8.5 Recipe-authoring tooling
+
+The recipe/bundle system (§8.4) is the primary extension point for this project, so authoring a
+new recipe needs first-class tooling — not just a folder convention a contributor copies by hand
+and a set of engine internals they have to read to understand:
+
+- **Scaffold** — a command that generates a new `recipes/<category>/<id>/manifest.ts` stub with
+  every `RecipeManifest` field represented (required fields filled in, optional ones commented out
+  with a one-line explanation each), so a contributor doesn't need to cross-reference the engine's
+  types to see what's available.
+- **Validate** — a static pass over every discovered manifest, run before any generation:
+  `conflicts`/`requires`/`requiresAnyOf` entries that reference an id no recipe has (or reference
+  the recipe's own id), a package pinned to two different versions by two different recipes'
+  `packageJsonPatch`, and an `envVars` key declared by more than one recipe — surfaced up front
+  rather than discovered by trial and error (or not at all, since a silent last-write-wins merge
+  produces no error either way).
+- **Duplication check** — flags files that are byte-for-byte identical across two different
+  recipes' own `files/`/`inject/` trees, so structural duplication gets caught before it calcifies
+  into two hand-maintained copies of the same file. Genuinely identical content (not a coincidence)
+  belongs in a shared fragment instead: a `recipes/shared/<name>/` directory, laid out like a
+  recipe root, that any number of recipes reference via a `sharedDirs` manifest field rather than
+  each carrying its own copy.
+- **Dry run** — generates a selection into a disposable location and reports the resulting file
+  list, so a contributor can preview what a recipe combination actually produces without running a
+  full install/migration cycle for every iteration.
+- **Marker inventory** — lists every marker-comment injection point available for a given
+  selection (base template plus whichever bundle/category recipes are included), so a contributor
+  doesn't have to grep the base template and every bundle by hand to find where they can graft in.
+
 ## 9. Testing strategy (test-first, both for the tool and generated projects)
 
 Test-first applies at two levels: building Inikitty itself, and what Inikitty ships inside every generated project.
@@ -182,7 +211,8 @@ Documentation is split into two audiences: people building Inikitty, and people 
 ### 10.1 Documentation for the tool
 
 - A `docs/` site (or well-organized `docs/` folder if a full site is premature) covering: getting started, how the recipe/bundle system works, how to author a new recipe, and an architecture decision record (ADR) explaining _why_ each golden-path choice was made (Prisma over Drizzle, Better Auth over Auth0, CASL over Casbin, etc.) so future maintainers don't relitigate settled decisions without cause.
-- A contribution guide specifically for adding new recipes/bundles, referencing the plugin contract in §8.4.
+- A contribution guide specifically for adding new recipes/bundles, referencing the plugin contract
+  in §8.4 and the authoring tooling in §8.5.
 
 ### 10.2 Documentation generated inside every project
 
@@ -217,6 +247,12 @@ Add ORM choice (Drizzle) and UI library choice (Antd, shadcn/ui) as alternate re
 
 **Phase 3:**
 Add payment provider alternatives, monorepo toggle, and subdomain-based tenant resolution as a documented alternative strategy.
+
+**Beyond Phase 3 (exploratory, not committed):**
+See [`docs/product-scope-phase-2.md`](./product-scope-phase-2.md) for a speculative architecture
+direction — independently pluggable backend and frontend implementations, freely combinable via a
+certified API contract, beyond the current fixed NestJS + Vite/React pairing. Written down to
+record the shape before anyone builds toward it, not a commitment to build any of it.
 
 ## 13. Open questions to resolve before implementation
 
