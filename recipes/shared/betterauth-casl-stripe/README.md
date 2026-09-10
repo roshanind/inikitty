@@ -1,8 +1,8 @@
-# `_shared/betterauth-casl-stripe`
+# `shared/betterauth-casl-stripe`
 
 Not a recipe — no `manifest.ts`, so `discoverRecipes()` never picks this up as one. It's a
 **shared fragment**: a `files/` and `inject/` tree structured exactly like a recipe root, referenced
-via `sharedDirs: ['_shared/betterauth-casl-stripe']` in both `prisma-betterauth-casl-stripe`'s and
+via `sharedDirs: ['shared/betterauth-casl-stripe']` in both `prisma-betterauth-casl-stripe`'s and
 `drizzle-betterauth-casl-stripe`'s `manifest.ts`.
 
 Every file here is byte-for-byte identical across both bundles because it genuinely doesn't care

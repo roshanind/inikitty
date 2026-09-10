@@ -32,8 +32,8 @@ describe('discoverRecipes', () => {
     expect(alpha?.postInstallPath).toBeDefined();
     expect(alpha?.sharedDirs).toEqual([
       {
-        filesDir: path.join(recipesDir, '_shared', 'common', 'files'),
-        injectDir: path.join(recipesDir, '_shared', 'common', 'inject'),
+        filesDir: path.join(recipesDir, 'shared', 'common', 'files'),
+        injectDir: path.join(recipesDir, 'shared', 'common', 'inject'),
       },
     ]);
 

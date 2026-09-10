@@ -56,7 +56,7 @@
   DTO/RBAC/testing conventions, same `Projects` worked example) against Drizzle instead of Prisma.
   `packages/shared` (CASL rules), every FE file, and every ORM-agnostic `api/` file (CASL guard,
   billing controller, Projects DTOs/controller, etc. — none has any ORM dependency) live once in
-  [`_shared/betterauth-casl-stripe`](_shared/betterauth-casl-stripe/README.md) and are declared via
+  [`shared/betterauth-casl-stripe`](shared/betterauth-casl-stripe/README.md) and are declared via
   `sharedDirs` in both bundles' `manifest.ts` rather than hand-copied into each — see "Sharing files
   between recipes" below. The two bundles are mutually exclusive (the engine only ever allows one
   `bundle`-category recipe selected at a time); pick this one for Drizzle, the other for Prisma. See
@@ -105,13 +105,13 @@ folder it lives in (`recipes/<category>/<id>/`).
 ## Sharing files between recipes
 
 If two-or-more recipes need the exact same file for a real reason (not just coincidentally similar
-— see `_shared/betterauth-casl-stripe/README.md` for the bar), don't hand-copy it into each recipe's
+— see `shared/betterauth-casl-stripe/README.md` for the bar), don't hand-copy it into each recipe's
 own `files/`/`inject/`. Instead:
 
-1. Put the shared `files/`/`inject/` tree under `recipes/_shared/<name>/` — same internal layout as
+1. Put the shared `files/`/`inject/` tree under `recipes/shared/<name>/` — same internal layout as
    a recipe root, but with no `manifest.ts`, so `discoverRecipes()` never treats it as a recipe (it
    only registers `<category>/<id>/` folders that have one).
-2. List it in each recipe's manifest: `sharedDirs: ['_shared/<name>']` (paths are relative to
+2. List it in each recipe's manifest: `sharedDirs: ['shared/<name>']` (paths are relative to
    `recipesDir`).
 
 At generate time, each recipe's `sharedDirs` entries are copied/injected *before* its own
