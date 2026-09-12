@@ -3,6 +3,16 @@ import type { DiscoveredRecipe, RecipeSelection } from './types.js';
 
 export class RecipeResolutionError extends Error {}
 
+export interface ResolveRecipesOptions {
+  /** Recipe ids resolved by another axis (e.g. a backend's bundle, when resolving a frontend's
+   * selection in a multi-axis generation) — consulted only for `requires`/`requiresAnyOf` checks,
+   * never `conflicts`. Lets a recipe in one axis depend on a recipe in another without either
+   * axis's `discoverRecipes()` call needing to see the other axis's recipes at all. Omitted by
+   * every single-axis caller; empty by default, so this is a no-op unless multi-axis generation
+   * explicitly opts in. */
+  externallySatisfiedIds?: Set<string>;
+}
+
 /**
  * Resolves a user's selection against the discovered recipe set into an ordered list
  * to apply: the bundle first (if any), then category recipes sorted by category then id
@@ -11,7 +21,9 @@ export class RecipeResolutionError extends Error {}
 export function resolveRecipes(
   discovered: DiscoveredRecipe[],
   selection: RecipeSelection,
+  options: ResolveRecipesOptions = {},
 ): DiscoveredRecipe[] {
+  const externallySatisfiedIds = options.externallySatisfiedIds ?? new Set<string>();
   const byId = new Map(discovered.map((r) => [r.manifest.id, r]));
   const availableBundles = discovered.filter((r) => r.manifest.category === BUNDLE_CATEGORY);
 
@@ -46,7 +58,9 @@ export function resolveRecipes(
     const recipe = byId.get(id);
     if (!recipe) continue;
 
-    const missingRequires = (recipe.manifest.requires ?? []).filter((req) => !selectedIds.has(req));
+    const isSatisfied = (req: string) => selectedIds.has(req) || externallySatisfiedIds.has(req);
+
+    const missingRequires = (recipe.manifest.requires ?? []).filter((req) => !isSatisfied(req));
     if (missingRequires.length > 0) {
       throw new RecipeResolutionError(
         `Recipe "${id}" requires ${missingRequires.map((r) => `"${r}"`).join(', ')}, which ` +
@@ -55,7 +69,7 @@ export function resolveRecipes(
     }
 
     const anyOf = recipe.manifest.requiresAnyOf ?? [];
-    if (anyOf.length > 0 && !anyOf.some((req) => selectedIds.has(req))) {
+    if (anyOf.length > 0 && !anyOf.some(isSatisfied)) {
       throw new RecipeResolutionError(
         `Recipe "${id}" requires one of ${anyOf.map((r) => `"${r}"`).join(', ')}, none of which are selected.`,
       );

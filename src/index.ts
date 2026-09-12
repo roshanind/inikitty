@@ -1,8 +1,16 @@
-export { generate } from './engine/apply.js';
-export type { GenerateResult } from './engine/apply.js';
+export { applyRecipesToOutput, finalizeOutput, generate, generateMultiAxis } from './engine/apply.js';
+export type {
+  ApplyRecipesToOutputOptions,
+  AxisOptions,
+  FinalizeOutputOptions,
+  GenerateMultiAxisOptions,
+  GenerateMultiAxisResult,
+  GenerateResult,
+} from './engine/apply.js';
 export { discoverRecipes } from './engine/discover.js';
 export { runPostInstalls } from './engine/postInstall.js';
 export { resolveRecipes, RecipeResolutionError } from './engine/resolve.js';
+export type { ResolveRecipesOptions } from './engine/resolve.js';
 export { BUNDLE_CATEGORY } from './engine/types.js';
 export type {
   DiscoveredRecipe,
