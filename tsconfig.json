@@ -12,6 +12,15 @@
     "resolveJsonModule": true,
     "noUncheckedIndexedAccess": true
   },
-  "include": ["src", "tests", "recipes", "scripts"],
-  "exclude": ["node_modules", "dist", "templates", "**/inject/**", "recipes/**/files/**"]
+  "include": ["src", "tests", "backends", "frontends", "scripts"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "templates",
+    "**/inject/**",
+    "backends/**/base/**",
+    "backends/**/files/**",
+    "frontends/**/base/**",
+    "frontends/**/files/**"
+  ]
 }

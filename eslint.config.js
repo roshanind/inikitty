@@ -6,7 +6,15 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    ignores: ['dist/**', 'templates/**', 'node_modules/**', '**/inject/**', 'docs-site/**'],
+    ignores: [
+      'dist/**',
+      'templates/**',
+      'node_modules/**',
+      '**/inject/**',
+      'docs-site/**',
+      'backends/**/base/**',
+      'frontends/**/base/**',
+    ],
   },
   {
     rules: {

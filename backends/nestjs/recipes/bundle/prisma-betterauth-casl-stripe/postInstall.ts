@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import type { PostInstallContext } from '../../../src/engine/types.js';
+import type { PostInstallContext } from '../../../../../src/engine/types.js';
 
 /** Matches Prisma's own migration folder naming (YYYYMMDDHHmmss_description). */
 function prismaTimestamp(date = new Date()): string {

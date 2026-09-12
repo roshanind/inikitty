@@ -1,4 +1,4 @@
-import type { RecipeManifest } from '../../../src/engine/types.js';
+import type { RecipeManifest } from '../../../../../src/engine/types.js';
 
 // Grouped by the module each dependency actually belongs to (not the file's own directory
 // structure, which — unlike this manifest — already mirrors that grouping: files/api/src/auth/,
@@ -54,38 +54,6 @@ const authApiDevDeps = {
   auth: '^1.7.2',
 };
 
-const caslAppDeps = {
-  '@casl/ability': '^6.7.3',
-  '{{projectNameKebab}}-shared': 'workspace:*',
-};
-
-const projectsAppDeps = {
-  // FE half of the Projects worked example: routing, server-state, and the same Better
-  // Auth client library the API uses (its React entrypoint, not the server one).
-  'react-router-dom': '^7.18.3',
-  '@tanstack/react-query': '^5.102.8',
-};
-
-const authAppDeps = {
-  'better-auth': '^1.7.2',
-  // `app/`'s better-auth resolves as a different peer-variant than `api/`'s (api/ also has
-  // @prisma/client/pg/prisma as peers, app/ doesn't) — pnpm gives each variant its own
-  // independently-resolved copy of better-auth's internal zod dependency, and the two can
-  // land on different patch versions even with byte-identical semver ranges everywhere.
-  // Pinning zod directly here too (matching api/'s own pin) collapses both variants back to
-  // one shared zod install — verified via a real `pnpm install` + `pnpm why zod`, not
-  // assumed; without this, `nest build` fails with TS2742 on `auth.ts`'s inferred type.
-  zod: '^4.3.6',
-};
-
-const uiAppDeps = {
-  // UI library for the golden path (Phase 1 bakes in one default — see
-  // docs/product-scope.md §12; a pluggable UI-library *choice* is Phase 2).
-  '@mui/material': '^9.4.0',
-  '@emotion/react': '^11.14.0',
-  '@emotion/styled': '^11.14.1',
-};
-
 export const manifest: RecipeManifest = {
   id: 'prisma-betterauth-casl-stripe',
   category: 'bundle',
@@ -96,11 +64,14 @@ export const manifest: RecipeManifest = {
     'Stripe billing (Checkout, Customer Portal, webhook-driven Subscription sync), and the ' +
     'Projects example resource (tenant-scoped, RBAC-guarded CRUD with MUI-based FE ' +
     'list/create/detail pages) end to end.',
-  // Everything here that never mentions Prisma/Drizzle (CASL guard, billing controller, Projects
-  // DTOs/controller, the FE pages, packages/shared, docker-compose.yml, etc.) lives once in
-  // shared/betterauth-casl-stripe and is shared with the Drizzle bundle, rather than being
-  // hand-copied — see that directory's own comment for why.
-  sharedDirs: ['shared/betterauth-casl-stripe'],
+  // Everything backend-agnostic-in-web-framework-but-not-ORM (CASL guard, billing controller,
+  // Projects DTOs/controller, packages/shared, docker-compose.yml, etc.) lives once in
+  // backends/shared/betterauth-casl-stripe and is shared with the Drizzle bundle, rather than
+  // being hand-copied — see that directory's own comment for why. The FE pages that used to live
+  // alongside this now live in frontends/react-vite/recipes/pages/betterauth-casl-stripe-pages/,
+  // which requiresAnyOf this bundle's id instead — a frontend recipe, not part of this bundle,
+  // since the FE pages don't care whether this backend or Express implements the same contract.
+  sharedDirs: ['../../shared/betterauth-casl-stripe'],
   packageJsonPatch: {
     api: {
       dependencies: {
@@ -115,20 +86,12 @@ export const manifest: RecipeManifest = {
         ...authApiDevDeps,
       },
       // `@thallesp/nestjs-better-auth` ships ESM-only; Jest's CommonJS test runner can't load a
-      // real .mjs file even with a transform configured (see recipes/README.md). Redirects any
-      // unit test's import of it to a manual mock instead — real auth behavior is covered by
-      // test/golden-path.e2e-spec.ts, which spawns the real compiled server and never goes
-      // through Jest's module loader for it at all.
+      // real .mjs file even with a transform configured (see backends/nestjs/recipes/README.md).
+      // Redirects any unit test's import of it to a manual mock instead — real auth behavior is
+      // covered by test/golden-path.e2e-spec.ts, which spawns the real compiled server and never
+      // goes through Jest's module loader for it at all.
       jestModuleNameMapper: {
         '^@thallesp/nestjs-better-auth$': '<rootDir>/test/__mocks__/thallesp-nestjs-better-auth.ts',
-      },
-    },
-    app: {
-      dependencies: {
-        ...caslAppDeps,
-        ...projectsAppDeps,
-        ...authAppDeps,
-        ...uiAppDeps,
       },
     },
   },

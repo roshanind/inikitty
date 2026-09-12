@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
-import type { PostInstallContext } from '../../../src/engine/types.js';
+import type { PostInstallContext } from '../../../../../src/engine/types.js';
 
 /** Mirrors apply.ts's own toKebabCase exactly — duplicated rather than imported across the
  * engine/recipe boundary, same as the Prisma bundle's postInstall.ts keeps its own small
