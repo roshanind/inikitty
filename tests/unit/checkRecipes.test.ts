@@ -39,6 +39,12 @@ describe('checkDanglingReferences', () => {
     expect(issues).toHaveLength(1);
     expect(issues[0]?.message).toContain('lists itself');
   });
+
+  it('does not flag a reference satisfied by externallyKnownIds (a cross-axis reference)', () => {
+    const a = makeRecipe({ id: 'a', category: 'pages', requiresAnyOf: ['backend-bundle'] });
+    expect(checkDanglingReferences([a])).toHaveLength(1);
+    expect(checkDanglingReferences([a], new Set(['backend-bundle']))).toEqual([]);
+  });
 });
 
 describe('checkDependencyVersionMismatches', () => {

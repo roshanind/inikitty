@@ -72,4 +72,44 @@ describe('resolveRecipes', () => {
       resolveRecipes(discovered, { bundle: 'gamma', categories: ['needs-alpha-or-beta'] }),
     ).toThrow(/requires one of/i);
   });
+
+  describe('externallySatisfiedIds', () => {
+    it('satisfies a requires relationship without the id being part of this resolution', () => {
+      // needs-alpha requires 'alpha', but this resolution selects the 'beta' bundle instead —
+      // without externallySatisfiedIds this must fail, exactly like the plain requires test above.
+      expect(() => resolveRecipes(discovered, { bundle: 'beta', categories: ['needs-alpha'] })).toThrow(
+        /requires/i,
+      );
+
+      expect(() =>
+        resolveRecipes(
+          discovered,
+          { bundle: 'beta', categories: ['needs-alpha'] },
+          { externallySatisfiedIds: new Set(['alpha']) },
+        ),
+      ).not.toThrow();
+    });
+
+    it('satisfies a requiresAnyOf relationship the same way', () => {
+      expect(() =>
+        resolveRecipes(
+          discovered,
+          { bundle: 'gamma', categories: ['needs-alpha-or-beta'] },
+          { externallySatisfiedIds: new Set(['beta']) },
+        ),
+      ).not.toThrow();
+    });
+
+    it('is never consulted for conflicts — only requires/requiresAnyOf', () => {
+      // 'conflicting' conflicts with 'widgets'; widgets is only externally satisfied here, never
+      // actually selected in this resolution's own categories, so no conflict should fire.
+      expect(() =>
+        resolveRecipes(
+          discovered,
+          { bundle: 'alpha', categories: ['conflicting'] },
+          { externallySatisfiedIds: new Set(['widgets']) },
+        ),
+      ).not.toThrow();
+    });
+  });
 });

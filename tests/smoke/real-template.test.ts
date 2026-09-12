@@ -3,14 +3,18 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
-import { generate } from '../../src/engine/apply.js';
+import { generateMultiAxis } from '../../src/engine/apply.js';
 
-// Exercises the REAL templates/base and REAL recipes/ together, as a smoke check that the actual
-// shipped template and recipes are well-formed — separate from the fixture-driven unit tests,
-// which intentionally use a small fake base/recipes set so they don't churn as these evolve.
+// Exercises the REAL templates/root, backends/nestjs, and frontends/react-vite together, as a
+// smoke check that the actual shipped implementations are well-formed — separate from the
+// fixture-driven unit tests, which intentionally use a small fake multi-axis set so they don't
+// churn as these evolve.
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const baseTemplateDir = path.join(repoRoot, 'templates', 'base');
-const recipesDir = path.join(repoRoot, 'recipes');
+const rootTemplateDir = path.join(repoRoot, 'templates', 'root');
+const nestjsBaseDir = path.join(repoRoot, 'backends', 'nestjs', 'base');
+const nestjsRecipesDir = path.join(repoRoot, 'backends', 'nestjs', 'recipes');
+const reactViteBaseDir = path.join(repoRoot, 'frontends', 'react-vite', 'base');
+const reactViteRecipesDir = path.join(repoRoot, 'frontends', 'react-vite', 'recipes');
 
 let tmpDirs: string[] = [];
 
@@ -25,19 +29,24 @@ async function freshOutputDir(): Promise<string> {
   return path.join(parent, 'generated');
 }
 
-describe('real base template', () => {
+describe('real templates/root + backends/nestjs + frontends/react-vite', () => {
   it('generates a well-formed project with no bundle recipes available', async () => {
     const outputDir = await freshOutputDir();
-    // No bundle recipe is selected here; the real recipes/ dir does have one now, so point at an
-    // empty dir to exercise the "base template only" path (mirrors apply.test.ts's fixture case).
+    // No bundle recipe is selected here; the real backends/nestjs/recipes dir does have one now,
+    // so point the backend axis at an empty dir to exercise the "base template only" path
+    // (mirrors apply.test.ts's fixture case). The frontend axis uses the real tree with no
+    // categories selected, which is equally a no-op since betterauth-casl-stripe-pages requires
+    // a bundle id that was never resolved.
     const emptyRecipesDir = path.join(repoRoot, 'tests', 'fixtures', 'empty-recipes');
 
-    const result = await generate({
-      baseTemplateDir,
-      recipesDir: emptyRecipesDir,
+    const result = await generateMultiAxis({
+      rootTemplateDir,
       outputDir,
       projectName: 'Smoke Test App',
-      selection: { categories: [] },
+      axes: [
+        { recipesDir: emptyRecipesDir, baseTemplateDir: nestjsBaseDir, selection: { categories: [] } },
+        { recipesDir: reactViteRecipesDir, baseTemplateDir: reactViteBaseDir, selection: { categories: [] } },
+      ],
     });
 
     expect(result.appliedRecipes).toEqual([]);
@@ -117,29 +126,40 @@ describe('real base template', () => {
     expect(appTsx).toContain("const projectName = 'Smoke Test App';");
   });
 
-  it('generates a well-formed project with the real golden-path bundle + jwt-plugin + all ai-format shims selected', async () => {
+  it('generates a well-formed project with the real golden-path bundle + jwt-plugin + all ai-format shims + the frontend pages recipe selected', async () => {
     const outputDir = await freshOutputDir();
 
-    const result = await generate({
-      baseTemplateDir,
-      recipesDir,
+    const result = await generateMultiAxis({
+      rootTemplateDir,
       outputDir,
       projectName: 'Auth Smoke App',
-      selection: {
-        bundle: 'prisma-betterauth-casl-stripe',
-        categories: ['jwt-plugin', 'claude-code', 'cursor', 'copilot'],
-      },
+      axes: [
+        {
+          recipesDir: nestjsRecipesDir,
+          baseTemplateDir: nestjsBaseDir,
+          selection: {
+            bundle: 'prisma-betterauth-casl-stripe',
+            categories: ['jwt-plugin', 'claude-code', 'cursor', 'copilot'],
+          },
+        },
+        {
+          recipesDir: reactViteRecipesDir,
+          baseTemplateDir: reactViteBaseDir,
+          selection: { categories: ['betterauth-casl-stripe-pages'] },
+        },
+      ],
       runPostInstall: false, // postInstall needs Docker + installed deps; covered by manual e2e verification
     });
 
-    // Bundle-first, then alphabetical by category-then-id: 'ai-format' (claude-code, copilot,
-    // cursor, alphabetically) sorts before 'auth-extra' (jwt-plugin).
+    // Backend axis resolves bundle-first, then alphabetical by category-then-id ('ai-format'
+    // sorts before 'auth-extra'), followed by the frontend axis's own resolved recipes.
     expect(result.appliedRecipes.map((r) => r.manifest.id)).toEqual([
       'prisma-betterauth-casl-stripe',
       'claude-code',
       'copilot',
       'cursor',
       'jwt-plugin',
+      'betterauth-casl-stripe-pages',
     ]);
 
     for (const relPath of [
@@ -345,24 +365,32 @@ describe('real base template', () => {
     expect(copilotInstructions).toContain('[`AGENTS.md`](../AGENTS.md)');
   });
 
-  it('generates a well-formed project with the real Drizzle bundle + jwt-plugin selected', async () => {
+  it('generates a well-formed project with the real Drizzle bundle + jwt-plugin + the frontend pages recipe selected', async () => {
     const outputDir = await freshOutputDir();
 
-    const result = await generate({
-      baseTemplateDir,
-      recipesDir,
+    const result = await generateMultiAxis({
+      rootTemplateDir,
       outputDir,
       projectName: 'Drizzle Smoke App',
-      selection: {
-        bundle: 'drizzle-betterauth-casl-stripe',
-        categories: ['jwt-plugin'],
-      },
+      axes: [
+        {
+          recipesDir: nestjsRecipesDir,
+          baseTemplateDir: nestjsBaseDir,
+          selection: { bundle: 'drizzle-betterauth-casl-stripe', categories: ['jwt-plugin'] },
+        },
+        {
+          recipesDir: reactViteRecipesDir,
+          baseTemplateDir: reactViteBaseDir,
+          selection: { categories: ['betterauth-casl-stripe-pages'] },
+        },
+      ],
       runPostInstall: false, // postInstall needs Docker + installed deps; covered by manual e2e verification
     });
 
     expect(result.appliedRecipes.map((r) => r.manifest.id)).toEqual([
       'drizzle-betterauth-casl-stripe',
       'jwt-plugin',
+      'betterauth-casl-stripe-pages',
     ]);
 
     for (const relPath of [
