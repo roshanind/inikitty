@@ -17,8 +17,16 @@ function bothBundles(a: DiscoveredRecipe, b: DiscoveredRecipe): boolean {
  * Flags `conflicts`/`requires`/`requiresAnyOf` entries that reference an id no discovered recipe
  * has, or reference the recipe's own id. `sharedDirs` needs no equivalent check here —
  * `discoverRecipes()` already throws at discovery time if an entry doesn't exist on disk.
+ *
+ * `externallyKnownIds` is for a multi-axis check run (see `scripts/check-recipes.ts`): a frontend
+ * recipe's `requiresAnyOf` on a backend bundle id is a legitimate cross-axis reference by design
+ * (`generateMultiAxis`'s `externallySatisfiedIds`, not this tree's own `discoverRecipes()` set) —
+ * pass every other tree's ids here so it isn't flagged as dangling. Omit for a single-tree check.
  */
-export function checkDanglingReferences(discovered: DiscoveredRecipe[]): CheckIssue[] {
+export function checkDanglingReferences(
+  discovered: DiscoveredRecipe[],
+  externallyKnownIds: Set<string> = new Set(),
+): CheckIssue[] {
   const ids = new Set(discovered.map((r) => r.manifest.id));
   const issues: CheckIssue[] = [];
 
@@ -33,7 +41,7 @@ export function checkDanglingReferences(discovered: DiscoveredRecipe[]): CheckIs
       for (const ref of list) {
         if (ref === id) {
           issues.push({ level: 'error', message: `"${id}" lists itself in ${field}.` });
-        } else if (!ids.has(ref)) {
+        } else if (!ids.has(ref) && !externallyKnownIds.has(ref)) {
           issues.push({
             level: 'error',
             message: `"${id}"'s ${field} references unknown recipe id "${ref}".`,
@@ -110,9 +118,9 @@ export function checkEnvVarKeyCollisions(discovered: DiscoveredRecipe[]): CheckI
   return issues;
 }
 
-export function checkAll(discovered: DiscoveredRecipe[]): CheckIssue[] {
+export function checkAll(discovered: DiscoveredRecipe[], externallyKnownIds: Set<string> = new Set()): CheckIssue[] {
   return [
-    ...checkDanglingReferences(discovered),
+    ...checkDanglingReferences(discovered, externallyKnownIds),
     ...checkDependencyVersionMismatches(discovered),
     ...checkEnvVarKeyCollisions(discovered),
   ];

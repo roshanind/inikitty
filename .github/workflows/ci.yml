@@ -30,12 +30,12 @@ jobs:
       - run: pnpm build
 
   discover-bundles:
-    name: Discover bundle recipes
+    name: Discover backend bundle recipes
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs: generator
     outputs:
-      bundles: ${{ steps.list.outputs.bundles }}
+      pairs: ${{ steps.list.outputs.pairs }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -46,21 +46,22 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # Outputs a JSON array of every discovered bundle recipe's id, so the golden-path job below
-      # runs once per bundle automatically — v1 has exactly one, but the check must already be
-      # written to cover a second one without any workflow changes (see CLAUDE.md).
+      # Outputs a JSON array of every discovered {backend, bundle} pair, so the golden-path job
+      # below runs once per pair automatically — the same "discover, don't hardcode" pattern that
+      # already covered a second ORM bundle with zero workflow changes now also covers a second
+      # backend (see docs/product-scope-phase-2.md).
       - id: list
-        run: echo "bundles=$(pnpm exec tsx scripts/list-bundles.ts)" >> "$GITHUB_OUTPUT"
+        run: echo "pairs=$(pnpm exec tsx scripts/list-backend-bundles.ts)" >> "$GITHUB_OUTPUT"
 
   golden-path:
-    name: Golden path — ${{ matrix.bundle }}
+    name: Golden path — ${{ matrix.backend }} / ${{ matrix.bundle }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: discover-bundles
     strategy:
       fail-fast: false
       matrix:
-        bundle: ${{ fromJson(needs.discover-bundles.outputs.bundles) }}
+        include: ${{ fromJson(needs.discover-bundles.outputs.pairs) }}
     env:
       # A plain literal path, not `${{ runner.temp }}` — that context isn't available in a
       # job-level `env:` block. Each matrix entry gets its own isolated VM, so a fixed path is
@@ -82,10 +83,13 @@ jobs:
 
       # Mirrors exactly what a real `npx create-inikitty` run does: generate -> copy
       # .env.example's working local-dev defaults into api/.env -> pnpm install (once at the
-      # workspace root, since this bundle writes pnpm-workspace.yaml).
+      # workspace root, since this bundle writes pnpm-workspace.yaml). Frontend is always
+      # react-vite for now — the only frontend that exists — golden-path-generate.ts defaults to
+      # it when --frontend is omitted.
       - name: Generate + install
         run: >
           pnpm exec tsx scripts/golden-path-generate.ts
+          --backend ${{ matrix.backend }}
           --bundle ${{ matrix.bundle }}
           --out ${{ env.GENERATED_DIR }}
           --project-name "CI Golden Path"

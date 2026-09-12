@@ -7,11 +7,16 @@
  * see docs-site "Authoring a recipe" > "When to reach for sharedDirs" for when a hit is actually
  * worth extracting versus a coincidence.
  *
+ * Checks across every backend's and frontend's recipes together, not tree-by-tree — this is
+ * exactly the check that would have caught the original 49-file duplication between two backend
+ * bundles (`backends/nestjs`'s two bundles today; a future second backend tomorrow).
+ *
  * Usage: tsx scripts/check-recipe-duplication.ts [--recipes-dir <dir>]
  */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { discoverRecipes } from '../src/engine/discover.js';
+import { listAllAxisTrees } from './lib/axes.js';
 import { findDuplicateFiles } from './lib/checkDuplication.js';
 
 function arg(name: string): string | undefined {
@@ -22,14 +27,16 @@ function arg(name: string): string | undefined {
 async function main(): Promise<void> {
   const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
   const recipesDirArg = arg('recipes-dir');
-  const recipesDir = recipesDirArg ? path.resolve(recipesDirArg) : path.join(repoRoot, 'recipes');
 
-  const discovered = await discoverRecipes(recipesDir);
+  const recipesDirs = recipesDirArg ? [path.resolve(recipesDirArg)] : (await listAllAxisTrees(repoRoot)).map((t) => t.recipesDir);
+
+  const discovered = (await Promise.all(recipesDirs.map((dir) => discoverRecipes(dir)))).flat();
   const findings = await findDuplicateFiles(discovered);
 
   if (findings.length === 0) {
     console.log(
-      `No byte-identical files found across ${discovered.length} recipes' own files/+inject/ trees.`,
+      `No byte-identical files found across ${discovered.length} recipes' own files/+inject/ trees ` +
+        `(${recipesDirs.length} tree(s) checked).`,
     );
     return;
   }
@@ -47,8 +54,8 @@ async function main(): Promise<void> {
 
   console.log(
     `\n${findings.length} identical file(s) across ${byPair.size} recipe pair(s). If these are ` +
-      'genuinely identical for a structural reason (not a coincidence), consider recipes/shared/ ' +
-      '+ sharedDirs — see docs-site "Authoring a recipe".',
+      'genuinely identical for a structural reason (not a coincidence), consider a sharedDirs ' +
+      'fragment (e.g. backends/shared/) — see docs-site "Authoring a recipe".',
   );
 }
 

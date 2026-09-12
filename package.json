@@ -25,7 +25,7 @@
     "docs:dev": "pnpm --dir docs-site dev",
     "docs:build": "pnpm --dir docs-site build",
     "docs:preview": "pnpm --dir docs-site preview",
-    "ci:list-bundles": "tsx scripts/list-bundles.ts",
+    "ci:list-backend-bundles": "tsx scripts/list-backend-bundles.ts",
     "ci:golden-path:generate": "tsx scripts/golden-path-generate.ts",
     "ci:golden-path:post-install": "tsx scripts/golden-path-post-install.ts",
     "new-recipe": "tsx scripts/new-recipe.ts",

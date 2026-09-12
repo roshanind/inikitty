@@ -2,19 +2,24 @@
 /**
  * Generates a selection into a real temporary directory, prints every resulting file path, then
  * deletes the temp directory (pass --keep to leave it on disk for inspection instead). This
- * reuses the real generate() pipeline rather than re-implementing copy/inject/merge logic
+ * reuses the real generateMultiAxis() pipeline rather than re-implementing copy/inject/merge logic
  * separately, so "dry run" here means "leaves nothing behind," not "simulated without touching
  * disk" — the safest way to preview output is to actually run the real thing somewhere disposable.
  *
- * Usage: tsx scripts/dry-run.ts --bundle <id> [--categories a,b,c] [--keep]
- *        tsx scripts/dry-run.ts --categories a,b,c        # if no bundle exists/is required
+ * --backend/--frontend are optional when exactly one implementation exists for that axis (the
+ * common case today) — omitted, they auto-pick it, same as the CLI skipping its own prompt.
+ *
+ * Usage: tsx scripts/dry-run.ts [--backend <id>] [--bundle <id>] [--backend-categories a,b]
+ *                                [--frontend <id>] [--frontend-categories a,b] [--keep]
  */
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { generate } from '../src/engine/apply.js';
+import { fileURLToPath } from 'node:url';
+import { generateMultiAxis } from '../src/engine/apply.js';
 import { listFilesRecursive } from '../src/engine/fsUtils.js';
 import { RecipeResolutionError } from '../src/engine/resolve.js';
+import { resolveAxisTree } from './lib/axes.js';
 
 function arg(name: string): string | undefined {
   const idx = process.argv.indexOf(`--${name}`);
@@ -23,23 +28,42 @@ function arg(name: string): string | undefined {
 function flag(name: string): boolean {
   return process.argv.includes(`--${name}`);
 }
-
-async function main(): Promise<void> {
-  const bundle = arg('bundle');
-  const categories = (arg('categories') ?? '')
+function csv(value: string | undefined): string[] {
+  return (value ?? '')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+async function main(): Promise<void> {
+  const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const backendTree = await resolveAxisTree(repoRoot, 'backends', arg('backend'));
+  const frontendTree = await resolveAxisTree(repoRoot, 'frontends', arg('frontend'));
+
+  const bundle = arg('bundle');
+  const backendCategories = csv(arg('backend-categories'));
+  const frontendCategories = csv(arg('frontend-categories'));
 
   const parent = await fs.mkdtemp(path.join(os.tmpdir(), 'inikitty-dry-run-'));
   const outputDir = path.join(parent, 'generated');
 
   let result;
   try {
-    result = await generate({
+    result = await generateMultiAxis({
       outputDir,
       projectName: 'Dry Run App',
-      selection: { bundle, categories },
+      axes: [
+        {
+          recipesDir: backendTree.recipesDir,
+          baseTemplateDir: backendTree.baseTemplateDir,
+          selection: { bundle, categories: backendCategories },
+        },
+        {
+          recipesDir: frontendTree.recipesDir,
+          baseTemplateDir: frontendTree.baseTemplateDir,
+          selection: { categories: frontendCategories },
+        },
+      ],
       runPostInstall: false,
     });
   } catch (err) {
@@ -51,6 +75,7 @@ async function main(): Promise<void> {
     throw err;
   }
 
+  console.log(`Backend: ${backendTree.label}   Frontend: ${frontendTree.label}`);
   console.log(
     `Applied recipes: ${result.appliedRecipes.map((r) => r.manifest.id).join(', ') || '(none)'}\n`,
   );

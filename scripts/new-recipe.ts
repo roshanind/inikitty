@@ -1,12 +1,13 @@
 #!/usr/bin/env tsx
 /**
- * Scaffolds a new recipe folder: recipes/<category>/<id>/manifest.ts, pre-filled with every
+ * Scaffolds a new recipe folder — `backends/<backend>/recipes/<category>/<id>/manifest.ts` or
+ * `frontends/<frontend>/recipes/<category>/<id>/manifest.ts` — pre-filled with every
  * RecipeManifest field as a commented-out example so an author doesn't have to re-read
  * src/engine/types.ts to see what's available. Doesn't create files/ or inject/ — both are
  * optional, and an empty directory isn't tracked by git anyway; the printed next-steps point at
  * them instead.
  *
- * Usage: tsx scripts/new-recipe.ts <category> <id> [--description "..."]
+ * Usage: tsx scripts/new-recipe.ts (--backend <id> | --frontend <id>) <category> <id> [--description "..."]
  */
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
@@ -21,7 +22,7 @@ function arg(name: string): string | undefined {
 }
 
 function manifestTemplate(category: string, id: string, description: string): string {
-  return `import type { RecipeManifest } from '../../../src/engine/types.js';
+  return `import type { RecipeManifest } from '../../../../../src/engine/types.js';
 
 export const manifest: RecipeManifest = {
   id: '${id}',
@@ -35,16 +36,20 @@ export const manifest: RecipeManifest = {
   // conflicts: ['some-other-id'],
 
   // Recipe ids that must ALL also be selected (AND). Prefer requiresAnyOf when you depend on
-  // "some bundle with property X" rather than one specific id — see auth-extra/jwt-plugin.
+  // "some bundle with property X" rather than one specific id — see auth-extra/jwt-plugin. Can
+  // reference an id from the OTHER axis too (e.g. a frontend category requiring a backend
+  // bundle) — that's resolved via generateMultiAxis's externallySatisfiedIds, not this tree's own
+  // discoverRecipes() call, so it won't be flagged by pnpm check-recipes as dangling.
   // requires: ['some-bundle-id'],
 
   // Satisfied if AT LEAST ONE of these ids is selected (OR).
   // requiresAnyOf: ['bundle-a', 'bundle-b'],
 
-  // Paths (relative to recipesDir) to recipes/shared/<name>/ fragments applied before this
-  // recipe's own files/inject — only for content that's genuinely identical across recipes.
-  // See docs-site "Authoring a recipe" > "When to reach for sharedDirs".
-  // sharedDirs: ['shared/some-shared-fragment'],
+  // Paths (relative to this tree's own recipesDir) to a shared/<name>/ fragment applied before
+  // this recipe's own files/inject — only for content that's genuinely identical across recipes
+  // *within this same tree* (e.g. backends/shared/ for two backend bundles). See docs-site
+  // "Authoring a recipe" > "When to reach for sharedDirs".
+  // sharedDirs: ['../../shared/some-shared-fragment'],
 
   // Merged into api/package.json and/or app/package.json.
   // packageJsonPatch: {
@@ -58,9 +63,17 @@ export const manifest: RecipeManifest = {
 }
 
 async function main(): Promise<void> {
-  const [category, id] = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+  const backend = arg('backend');
+  const frontend = arg('frontend');
+  if ((backend && frontend) || (!backend && !frontend)) {
+    console.error('Usage: pnpm new-recipe (--backend <id> | --frontend <id>) <category> <id> [--description "..."]');
+    process.exit(1);
+  }
+  const [kind, implementation] = backend ? (['backends', backend] as const) : (['frontends', frontend as string] as const);
+
+  const [category, id] = process.argv.slice(2).filter((a) => !a.startsWith('--') && a !== backend && a !== frontend);
   if (!category || !id) {
-    console.error('Usage: pnpm new-recipe <category> <id> [--description "..."]');
+    console.error('Usage: pnpm new-recipe (--backend <id> | --frontend <id>) <category> <id> [--description "..."]');
     process.exit(1);
   }
 
@@ -76,7 +89,14 @@ async function main(): Promise<void> {
   }
 
   const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const recipeDir = path.join(repoRoot, 'recipes', category, id);
+  const implementationDir = path.join(repoRoot, kind, implementation);
+  if (!(await pathExists(path.join(implementationDir, 'base')))) {
+    throw new Error(
+      `"${kind}/${implementation}" doesn't look like a real implementation (no base/ found) — check the id.`,
+    );
+  }
+
+  const recipeDir = path.join(implementationDir, 'recipes', category, id);
   if (await pathExists(recipeDir)) {
     throw new Error(`"${path.relative(repoRoot, recipeDir)}" already exists.`);
   }
@@ -85,13 +105,14 @@ async function main(): Promise<void> {
   await fs.mkdir(recipeDir, { recursive: true });
   await fs.writeFile(path.join(recipeDir, 'manifest.ts'), manifestTemplate(category, id, description), 'utf8');
 
-  console.log(`Created recipes/${category}/${id}/manifest.ts\n`);
+  const relRecipeDir = path.relative(repoRoot, recipeDir);
+  console.log(`Created ${relRecipeDir}/manifest.ts\n`);
   console.log('Next steps:');
-  console.log(`  - Add files under recipes/${category}/${id}/files/ (mirrors the output layout)`);
+  console.log(`  - Add files under ${relRecipeDir}/files/ (mirrors the output layout)`);
   console.log('  - Add inject/ snippets for markers you need to graft into (pnpm list-markers shows what exists)');
   console.log('  - Add postInstall.ts if setup needs a script run after install');
   console.log('  - pnpm check-recipes             # validate references before testing');
-  console.log('  - pnpm dry-run --bundle <id>     # preview what a selection including this generates');
+  console.log(`  - pnpm dry-run --${backend ? 'backend' : 'frontend'} ${implementation}   # preview what this tree generates`);
   console.log('  - docs-site "Authoring a recipe" has the full walkthrough');
 }
 
