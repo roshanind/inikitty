@@ -41,8 +41,9 @@
 
   That test suite (and the whole "generate → install → Docker Postgres → migrate → test" flow
   this file otherwise documents as manual) now also **runs in CI** on every push
-  (`.github/workflows/ci.yml`, matrixed over `scripts/list-bundles.ts`'s output so a second bundle
-  is covered automatically). The "verified live"/"manual" language throughout this file describes
+  (`.github/workflows/ci.yml`, matrixed over `scripts/list-backend-bundles.ts`'s output so a second
+  bundle — or a second backend — is covered automatically). The "verified live"/"manual" language
+  throughout this file describes
   how each slice was originally verified *during development* — still accurate history — not the
   current state of whether it's automated.
 
@@ -54,14 +55,17 @@
 - **`bundle/drizzle-betterauth-casl-stripe`** — a second golden-path bundle, implementing the
   identical guarantees as the Prisma bundle above (same RLS policies, same CASL rules, same
   DTO/RBAC/testing conventions, same `Projects` worked example) against Drizzle instead of Prisma.
-  `packages/shared` (CASL rules), every FE file, and every ORM-agnostic `api/` file (CASL guard,
-  billing controller, Projects DTOs/controller, etc. — none has any ORM dependency) live once in
-  [`shared/betterauth-casl-stripe`](shared/betterauth-casl-stripe/README.md) and are declared via
-  `sharedDirs` in both bundles' `manifest.ts` rather than hand-copied into each — see "Sharing files
-  between recipes" below. The two bundles are mutually exclusive (the engine only ever allows one
-  `bundle`-category recipe selected at a time); pick this one for Drizzle, the other for Prisma. See
-  the Drizzle gotchas below for where its design genuinely diverges (there's no
-  Prisma-Client-Extension equivalent in Drizzle) and two real, live-verification-caught bugs.
+  `packages/shared` (CASL rules) and every ORM-agnostic `api/` file (CASL guard, billing
+  controller, Projects DTOs/controller, etc. — none has any ORM dependency) live once in
+  [`../shared/betterauth-casl-stripe`](../shared/betterauth-casl-stripe/README.md) and are declared
+  via `sharedDirs` in both bundles' `manifest.ts` rather than hand-copied into each — see "Sharing
+  files between recipes" below. (The FE pages, formerly shared here too, moved out entirely once
+  frontend became its own axis — see `docs/product-scope-phase-2.md` — they're now
+  `frontends/react-vite/recipes/pages/betterauth-casl-stripe-pages/`.) The two bundles are mutually
+  exclusive (the engine only ever allows one `bundle`-category recipe selected per axis at a time);
+  pick this one for Drizzle, the other for Prisma. See the Drizzle gotchas below for where its
+  design genuinely diverges (there's no Prisma-Client-Extension equivalent in Drizzle) and two
+  real, live-verification-caught bugs.
 - **`auth-extra/jwt-plugin`** — optional, off by default, `requiresAnyOf` either bundle above (its
   `auth.ts` markers exist identically in both — nothing about it is ORM-specific). Adds Better
   Auth's `jwt()`/`bearer()` plugins so a `GET /auth/token` endpoint can mint a signed JWT from the
@@ -90,29 +94,38 @@ above so engine tests don't churn as real recipes evolve).
 ## Folder contract
 
 ```
-recipes/<category>/<id>/
+<backends|frontends>/<implementation>/recipes/<category>/<id>/
   manifest.ts     # exports `manifest: RecipeManifest` (see src/engine/types.ts)
   files/          # files copied as-is into the generated project, mirroring its layout
                    # (e.g. files/api/src/foo.ts -> <output>/api/src/foo.ts)
   inject/         # snippets inserted at marker-comment injection points in files already
-                   # present in the output (base template or an earlier recipe)
+                   # present in the output (this axis's own base template or an earlier recipe)
   postInstall.ts  # optional; default-exports (ctx: { outputDir, projectName }) => Promise<void>
 ```
 
+This particular file documents `backends/nestjs/recipes/` specifically — everything below is about
+the NestJS backend's own bundles and category recipes. See the docs-site "Authoring a recipe" page
+and `docs/product-scope-phase-2.md` for how this fits into the backend/frontend axis split;
+`frontends/react-vite/recipes/` doesn't have its own gotchas doc yet (it's small today — one
+recipe).
+
 `manifest.ts` must export a `manifest` (named or default) whose `id` and `category` match the
-folder it lives in (`recipes/<category>/<id>/`).
+folder it lives in (`recipes/<category>/<id>/`, under this axis's own `recipes/`).
 
 ## Sharing files between recipes
 
-If two-or-more recipes need the exact same file for a real reason (not just coincidentally similar
-— see `shared/betterauth-casl-stripe/README.md` for the bar), don't hand-copy it into each recipe's
-own `files/`/`inject/`. Instead:
+If two-or-more recipes *within the same axis* need the exact same file for a real reason (not just
+coincidentally similar — see `../shared/betterauth-casl-stripe/README.md` for the bar), don't
+hand-copy it into each recipe's own `files/`/`inject/`. Instead:
 
-1. Put the shared `files/`/`inject/` tree under `recipes/shared/<name>/` — same internal layout as
-   a recipe root, but with no `manifest.ts`, so `discoverRecipes()` never treats it as a recipe (it
-   only registers `<category>/<id>/` folders that have one).
-2. List it in each recipe's manifest: `sharedDirs: ['shared/<name>']` (paths are relative to
-   `recipesDir`).
+1. Put the shared `files/`/`inject/` tree under `<axis>/shared/<name>/` (e.g.
+   `backends/shared/<name>/`) — same internal layout as a recipe root, but with no `manifest.ts`,
+   so `discoverRecipes()` never treats it as a recipe (it only registers `<category>/<id>/` folders
+   that have one).
+2. List it in each recipe's manifest: `sharedDirs: ['../../shared/<name>']` (paths are relative to
+   this axis's own `recipesDir` — two levels up gets from `<axis>/<implementation>/recipes/` to
+   `<axis>/shared/`; see `backends/nestjs/recipes/bundle/prisma-betterauth-casl-stripe/manifest.ts`
+   for the real example).
 
 At generate time, each recipe's `sharedDirs` entries are copied/injected *before* its own
 `files/`/`inject/` (so a recipe's own content always lands last, closest to the marker). This needed
@@ -577,7 +590,7 @@ config-format-specific set of gotchas in the whole bundle so far.
 - **`docs/adding-a-resource.md` had never actually been shipped into generated projects** — it was
   written (during the Projects slice) as a file in this generator repo's own `docs/`, which `AGENTS.md`
   could reference by path but which never actually existed in a real generated project. Moved (not
-  copied) into `recipes/bundle/prisma-betterauth-casl-stripe/files/docs/adding-a-resource.md` — one
+  copied) into `backends/nestjs/recipes/bundle/prisma-betterauth-casl-stripe/files/docs/adding-a-resource.md` — one
   source, and it's the one that ships, per `docs/product-scope.md` §11's own warning against a
   duplicated copy drifting out of sync.
 
@@ -704,7 +717,7 @@ config-format-specific set of gotchas in the whole bundle so far.
 
 ## Injecting into a file
 
-If the target file (e.g. `templates/base/api/src/app.module.ts`) contains a marker comment:
+If the target file (e.g. `backends/nestjs/base/api/src/app.module.ts`) contains a marker comment:
 
 ```ts
 // @inikitty:inject:module-imports
